@@ -1,0 +1,13 @@
+[Unit]
+Description=Simple 3D Printer Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=biqu
+WorkingDirectory=/home/biqu/simple3D
+ExecStart=/usr/bin/python3 -m http.server 8080
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

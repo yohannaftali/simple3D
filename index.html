@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Klipper Control</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; font-size: 15px; }
+  h2 { font-size: 16px; margin-bottom: 8px; color: #a0c4ff; }
+  .container { max-width: 480px; margin: 0 auto; padding: 12px; }
+  .col-left, .col-right { width: 100%; }
+  .card { background: #16213e; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+
+  /* Page system */
+  .page { display: none; padding-bottom: 54px; }
+  .page.active { display: block; }
+
+  /* Nav bar */
+  #nav-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 44px;
+    background: #0f0f23;
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch;
+    border-top: 1px solid #2a2a4a;
+    z-index: 100;
+  }
+  .nav-btn {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1;
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: #888; font-size: 11px; cursor: pointer; padding: 4px 2px;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 0;
+  }
+  .nav-btn:active { background: #1a1a3e; }
+  .nav-btn.active { color: #a0c4ff; border-bottom: 2px solid #a0c4ff; }
+
+  /* Accordion */
+  .accordion-header {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+  }
+  .accordion-header h2 { margin-bottom: 0; -webkit-flex: none; flex: none; }
+  .accordion-status {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1;
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    margin-left: 8px;
+  }
+  .accordion-arrow { font-size: 12px; color: #aaa; margin-left: 6px; }
+  #connection-content { margin-top: 10px; }
+
+  .row {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    -webkit-flex-wrap: wrap; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .row > * + * { margin-left: 8px; }
+
+  label { font-size: 13px; color: #aaa; min-width: 60px; }
+  input[type=text], input[type=number] {
+    background: #0f3460; border: 1px solid #444; border-radius: 4px;
+    color: #eee; padding: 6px 8px; font-size: 14px; width: 100%;
+  }
+  button {
+    background: #0f3460; border: 1px solid #2a5298; border-radius: 4px;
+    color: #eee; padding: 8px 12px; font-size: 14px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { background: #2a5298; }
+  button.danger { border-color: #c0392b; }
+  button.danger:active { background: #c0392b; }
+  button.warning { border-color: #e67e22; }
+  button.warning:active { background: #e67e22; }
+  button.success { border-color: #27ae60; }
+  button.success:active { background: #27ae60; }
+
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: #27ae60; }
+  .dot-red { background: #c0392b; }
+  .dot-yellow { background: #f39c12; }
+
+  .temp-value { font-size: 22px; font-weight: bold; color: #fff; }
+  .temp-target { font-size: 13px; color: #aaa; }
+  .temp-box { text-align: center; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+  .grid2 { display: -webkit-box; display: -webkit-flex; display: flex; margin-bottom: 10px; }
+  .grid2 > * + * { margin-left: 8px; }
+  .grid2 > * { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+
+  .move-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 6px; }
+
+  #status-bar { font-size: 13px; padding: 6px 10px; border-radius: 4px; margin-top: 8px; background: #0f3460; }
+  #print-progress { height: 8px; background: #0f3460; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  #print-progress-bar { height: 100%; background: #2a5298; width: 0%; -webkit-transition: width 0.5s; transition: width 0.5s; }
+
+  .settings-row { display: -webkit-box; display: -webkit-flex; display: flex; }
+  .settings-row > * + * { margin-left: 8px; }
+  .settings-row input { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+
+  select {
+    background: #0f3460; border: 1px solid #444; border-radius: 4px;
+    color: #eee; padding: 6px 8px; font-size: 14px;
+  }
+
+  .btn-row { display: -webkit-box; display: -webkit-flex; display: flex; }
+  .btn-row > * + * { margin-left: 8px; }
+  .btn-row > * { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+
+  #toast {
+    position: fixed; bottom: 54px; left: 50%;
+    -webkit-transform: translateX(-50%); transform: translateX(-50%);
+    background: #333; color: #fff; padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; display: none; z-index: 999;
+  }
+
+  /* Print status extra fields */
+  .print-meta { font-size: 12px; color: #aaa; margin-top: 4px; }
+  .print-meta > * + * { margin-top: 2px; }
+  .print-msg { font-size: 13px; color: #f0c040; margin-top: 4px; font-style: italic; }
+
+  /* Console */
+  #page-console .container { max-width: 100%; padding: 8px; height: 100%; }
+  #console-log {
+    background: #0a0a1a; border-radius: 6px; padding: 8px;
+    font-family: monospace; font-size: 12px;
+    overflow-y: auto;
+    height: calc(100vh - 150px);
+    word-break: break-all;
+  }
+  #console-log .log-cmd { color: #a0c4ff; }
+  #console-log .log-resp { color: #ccc; }
+  #console-log .log-err { color: #e74c3c; }
+  .console-input-row {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    margin-top: 8px;
+  }
+  .console-input-row > * + * { margin-left: 8px; }
+  .console-input-row input { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+
+  /* Calibrate */
+  .cal-adj-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 6px; margin: 8px 0; }
+  #cal-adj-panel { display: none; }
+
+  /* Jobs */
+  #jobs-list { overflow-y: auto; max-height: calc(100vh - 160px); }
+  .job-row {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #2a2a4a;
+  }
+  .job-row > * + * { margin-left: 8px; }
+  .job-info { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; overflow: hidden; }
+  .job-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-meta { font-size: 11px; color: #888; }
+  .job-row.printing .job-name { color: #27ae60; }
+
+  /* Filament */
+  .preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); grid-gap: 8px; margin-bottom: 8px; }
+  .temp-ready { font-size: 12px; margin-top: 4px; }
+  .temp-ready.ready { color: #27ae60; }
+  .temp-ready.not-ready { color: #e67e22; }
+
+  /* ===== LANDSCAPE ===== */
+  @media (orientation: landscape) {
+    #page-main { overflow: hidden; height: calc(100vh - 44px); }
+    #page-main .container {
+      display: -webkit-box; display: -webkit-flex; display: flex;
+      -webkit-flex-wrap: wrap; flex-wrap: wrap;
+      -webkit-align-content: flex-start; align-content: flex-start;
+      max-width: 100%; width: 100%; height: 100%;
+      padding: 4px; overflow: hidden;
+    }
+    #connection-card { width: 100%; margin-bottom: 4px; }
+    .col-left { width: 45%; padding-right: 4px; }
+    .col-right { width: 55%; }
+    .card { padding: 8px; margin-bottom: 4px; }
+    h2 { font-size: 13px; margin-bottom: 4px; }
+    button { padding: 5px 8px; font-size: 13px; }
+    input[type=text], input[type=number] { padding: 4px 6px; font-size: 13px; }
+    select { padding: 4px 6px; font-size: 13px; }
+    .temp-value { font-size: 18px; }
+    .temp-target { font-size: 11px; }
+    .grid2 { margin-bottom: 6px; }
+    .row { margin-bottom: 5px; }
+    label { font-size: 12px; }
+    .move-grid { grid-gap: 4px; }
+    #status-bar { padding: 4px 8px; margin-top: 6px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== MAIN PAGE ===== -->
+<div class="page active" id="page-main">
+  <div class="container">
+
+    <!-- Connection card (accordion) -->
+    <div class="card" id="connection-card">
+      <div class="accordion-header" onclick="toggleConnection()">
+        <h2>Connection</h2>
+        <div class="accordion-status">
+          <span class="status-dot dot-red" id="conn-dot" style="margin-right:5px;"></span>
+          <span id="conn-label" style="font-size:12px;color:#aaa;">Not connected</span>
+        </div>
+        <span class="accordion-arrow" id="connection-arrow">&#9650;</span>
+      </div>
+      <div id="connection-content">
+        <div class="settings-row" style="margin-top:10px;margin-bottom:8px;">
+          <input type="text" id="moonraker-ip" placeholder="e.g. 192.168.1.100">
+          <input type="text" id="moonraker-port" placeholder="Port" value="7125" style="width:80px;-webkit-flex:none;flex:none;">
+        </div>
+        <div class="btn-row">
+          <button onclick="saveSettings()" class="success">Save &amp; Connect</button>
+          <button onclick="refreshAll()">Refresh</button>
+        </div>
+        <div id="status-bar">Not connected</div>
+      </div>
+    </div>
+
+    <!-- Left column -->
+    <div class="col-left">
+
+      <!-- Temperature -->
+      <div class="card">
+        <h2>Temperature</h2>
+        <div class="grid2">
+          <div class="temp-box">
+            <div style="font-size:12px;color:#aaa;">Hotend</div>
+            <div class="temp-value" id="hotend-temp">--</div>
+            <div class="temp-target" id="hotend-target">target: --</div>
+          </div>
+          <div class="temp-box">
+            <div style="font-size:12px;color:#aaa;">Bed</div>
+            <div class="temp-value" id="bed-temp">--</div>
+            <div class="temp-target" id="bed-target">target: --</div>
+          </div>
+        </div>
+        <div class="row">
+          <label>Hotend</label>
+          <input type="number" id="set-hotend" placeholder="&#176;C" style="width:70px;-webkit-flex:none;flex:none;">
+          <button onclick="setTemp('extruder', 'set-hotend')">Set</button>
+          <button onclick="setTemp('extruder', null, 0)" class="danger">Off</button>
+        </div>
+        <div class="row" style="margin-bottom:0;">
+          <label>Bed</label>
+          <input type="number" id="set-bed" placeholder="&#176;C" style="width:70px;-webkit-flex:none;flex:none;">
+          <button onclick="setTemp('heater_bed', 'set-bed')">Set</button>
+          <button onclick="setTemp('heater_bed', null, 0)" class="danger">Off</button>
+        </div>
+      </div>
+
+      <!-- Fan & Speed -->
+      <div class="card">
+        <h2>Fan &amp; Speed</h2>
+        <div class="row">
+          <label>Fan</label>
+          <input type="number" id="fan-speed" placeholder="0-255" min="0" max="255" style="width:70px;-webkit-flex:none;flex:none;">
+          <button onclick="setFan()">Set</button>
+          <button onclick="sendGcode('M106 S0')" class="danger">Off</button>
+        </div>
+        <div class="row" style="margin-bottom:0;">
+          <label>Print %</label>
+          <input type="number" id="print-speed" placeholder="100" style="width:70px;-webkit-flex:none;flex:none;">
+          <button onclick="setSpeed()">Set</button>
+        </div>
+      </div>
+
+      <!-- Custom GCode -->
+      <div class="card">
+        <h2>Custom GCode</h2>
+        <div class="settings-row">
+          <input type="text" id="custom-gcode" placeholder="e.g. G28">
+          <button onclick="sendCustomGcode()" style="-webkit-flex:none;flex:none;">Send</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right column -->
+    <div class="col-right">
+
+      <!-- Print Status -->
+      <div class="card">
+        <h2>Print Status</h2>
+        <div class="row" style="margin-bottom:4px;">
+          <span class="status-dot dot-red" id="print-dot" style="margin-right:6px;"></span>
+          <span id="print-state">Unknown</span>
+          <span style="margin-left:auto;font-size:13px;" id="print-percent">0%</span>
+        </div>
+        <div id="print-progress"><div id="print-progress-bar"></div></div>
+        <div id="print-msg" class="print-msg" style="display:none;"></div>
+        <div class="print-meta">
+          <div id="print-filename"></div>
+          <div id="print-filament"></div>
+          <div id="print-times"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;" id="print-btn-row">
+          <button onclick="printAction('pause')" class="warning" id="btn-pause">Pause</button>
+          <button onclick="printAction('resume')" class="success" id="btn-resume">Resume</button>
+          <button onclick="printAction('cancel')" class="danger" id="btn-cancel">Cancel</button>
+          <button onclick="reprintLast()" class="success" id="btn-reprint" style="display:none;">Reprint</button>
+        </div>
+      </div>
+
+      <!-- Movement -->
+      <div class="card">
+        <h2>Movement</h2>
+        <div class="row">
+          <label>Step</label>
+          <select id="move-step">
+            <option value="0.1">0.1mm</option>
+            <option value="1" selected>1mm</option>
+            <option value="10">10mm</option>
+            <option value="50">50mm</option>
+          </select>
+        </div>
+        <div style="margin-bottom:6px;">
+          <div style="font-size:12px;color:#aaa;margin-bottom:4px;">X / Y</div>
+          <div class="move-grid">
+            <div></div>
+            <button onclick="move('Y', 1)">Y+</button>
+            <div></div>
+            <button onclick="move('X', -1)">X-</button>
+            <button onclick="sendGcode('G28 X Y')">Home</button>
+            <button onclick="move('X', 1)">X+</button>
+            <div></div>
+            <button onclick="move('Y', -1)">Y-</button>
+            <div></div>
+          </div>
+        </div>
+        <div style="margin-bottom:6px;">
+          <div style="font-size:12px;color:#aaa;margin-bottom:4px;">Z</div>
+          <div class="btn-row">
+            <button onclick="move('Z', 1)">Z+</button>
+            <button onclick="sendGcode('G28 Z')">Home Z</button>
+            <button onclick="move('Z', -1)">Z-</button>
+          </div>
+        </div>
+        <button onclick="sendGcode('G28')" style="width:100%" class="success">Home All</button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== CONSOLE PAGE ===== -->
+<div class="page" id="page-console">
+  <div style="padding:8px;padding-bottom:54px;">
+    <div class="card" style="margin-bottom:8px;">
+      <div style="display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:6px;">
+        <h2 style="margin-bottom:0;-webkit-box-flex:1;-webkit-flex:1;flex:1;">Console</h2>
+        <button onclick="clearConsole()" style="padding:4px 10px;font-size:12px;-webkit-flex:none;flex:none;">Clear</button>
+      </div>
+      <div id="console-log"></div>
+      <div class="console-input-row" style="margin-top:8px;">
+        <input type="text" id="console-input" placeholder="GCode command..." onkeydown="if(event.keyCode===13)sendConsoleCmd()">
+        <button onclick="sendConsoleCmd()" style="-webkit-flex:none;flex:none;">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CALIBRATE PAGE ===== -->
+<div class="page" id="page-calibrate">
+  <div style="padding:8px;padding-bottom:54px;">
+    <p style="font-size:12px;color:#888;margin-bottom:8px;padding:0 4px;">If your printer has a custom macro like PROBE_CALIBRATE_VORON_TAP, send it from the Custom GCode field on the Main page instead.</p>
+
+    <div class="card" style="margin-bottom:8px;">
+      <h2>Voron Tap / Probe</h2>
+      <p style="font-size:12px;color:#aaa;margin-bottom:8px;">Use if your printer uses a probe (Voron Tap, BLTouch, CR Touch, etc.)</p>
+      <button onclick="startCalibrate('PROBE_CALIBRATE')" class="success" style="width:100%;">PROBE_CALIBRATE</button>
+    </div>
+
+    <div class="card" style="margin-bottom:8px;">
+      <h2>Standard Z Endstop</h2>
+      <p style="font-size:12px;color:#aaa;margin-bottom:8px;">Use if your printer uses a physical Z endstop switch.</p>
+      <button onclick="startCalibrate('Z_ENDSTOP_CALIBRATE')" class="success" style="width:100%;">Z_ENDSTOP_CALIBRATE</button>
+    </div>
+
+    <div class="card" id="cal-adj-panel">
+      <h2>Adjust Z Offset</h2>
+      <p style="font-size:12px;color:#f0c040;margin-bottom:8px;">Paper test: nozzle should just drag on paper.</p>
+      <div class="cal-adj-grid">
+        <button onclick="testz(1)">+1</button>
+        <button onclick="testz(0.1)">+0.1</button>
+        <button onclick="testz(0.025)">+0.025</button>
+        <button onclick="testz(-0.025)">-0.025</button>
+        <button onclick="testz(-0.1)">-0.1</button>
+        <button onclick="testz(-1)">-1</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button onclick="calAccept()" class="success">ACCEPT</button>
+        <button onclick="calAbort()" class="danger">ABORT</button>
+      </div>
+      <div id="cal-save-row" style="display:none;margin-top:8px;">
+        <button onclick="calSaveConfig()" class="warning" style="width:100%;">SAVE_CONFIG (printer will restart)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JOBS PAGE ===== -->
+<div class="page" id="page-jobs">
+  <div style="padding:8px;padding-bottom:54px;">
+    <div class="card">
+      <div style="display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:8px;">
+        <h2 style="margin-bottom:0;-webkit-box-flex:1;-webkit-flex:1;flex:1;">Print Jobs</h2>
+        <button onclick="fetchJobs()" style="padding:4px 10px;font-size:12px;-webkit-flex:none;flex:none;">Refresh</button>
+      </div>
+      <div id="jobs-list"><p style="color:#888;font-size:13px;">Loading...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FILAMENT PAGE ===== -->
+<div class="page" id="page-filament">
+  <div style="padding:8px;padding-bottom:54px;">
+
+    <div class="card" style="margin-bottom:8px;">
+      <h2>Preheat</h2>
+      <div class="preset-grid">
+        <button onclick="preheat(200)">PLA 200&#176;C</button>
+        <button onclick="preheat(235)">PETG 235&#176;C</button>
+        <button onclick="preheat(250)">ABS 250&#176;C</button>
+        <button onclick="preheat(220)">TPU 220&#176;C</button>
+      </div>
+      <div class="row" style="margin-bottom:6px;">
+        <label>Custom</label>
+        <input type="number" id="fil-temp" placeholder="&#176;C" style="width:70px;-webkit-flex:none;flex:none;">
+        <button onclick="preheatCustom()">Set</button>
+        <button onclick="preheat(0)" class="danger">Off</button>
+      </div>
+      <div class="row" style="margin-bottom:0;">
+        <span style="font-size:13px;">Hotend: <span id="fil-hotend-temp">--</span></span>
+        <span id="fil-temp-ready" class="temp-ready not-ready" style="margin-left:12px;">Not ready</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:8px;">
+      <h2>Unload</h2>
+      <p style="font-size:12px;color:#888;margin-bottom:8px;">Home axes if printer is not homed before loading/unloading.</p>
+      <div class="btn-row">
+        <button onclick="filament('retract', 50)">Retract 50mm</button>
+        <button onclick="filament('retract', 100)">Retract 100mm</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Load &amp; Purge</h2>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button onclick="filament('load', 50)">Load 50mm</button>
+      </div>
+      <div class="btn-row">
+        <button onclick="filament('purge', 30)">Purge 30mm</button>
+        <button onclick="filament('purge', 50)">Purge 50mm</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Nav bar -->
+<div id="nav-bar">
+  <button onclick="showPage('main')" class="nav-btn active" id="nav-main">&#8962; Main</button>
+  <button onclick="showPage('console')" class="nav-btn" id="nav-console">&#9654; Console</button>
+  <button onclick="showPage('calibrate')" class="nav-btn" id="nav-calibrate">&#8853; Calibrate</button>
+  <button onclick="showPage('jobs')" class="nav-btn" id="nav-jobs">&#9776; Jobs</button>
+  <button onclick="showPage('filament')" class="nav-btn" id="nav-filament">&#8597; Filament</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+var BASE_URL = '';
+var refreshTimer = null;
+var currentPage = 'main';
+
+// Phase 2 state
+var lastFilename = '';
+var cachedMetaFile = '';
+var cachedEstimatedTime = 0;
+var cachedFilamentTotal = 0;
+
+// Console state
+var lastConsoleTime = 0;
+var consoleUserScrolled = false;
+
+// Filament state
+var filHotendTemp = 0;
+var filHotendTarget = 0;
+
+var PAGES = ['main', 'console', 'calibrate', 'jobs', 'filament'];
+
+function showPage(name) {
+  for (var i = 0; i < PAGES.length; i++) {
+    var p = document.getElementById('page-' + PAGES[i]);
+    if (p) p.className = 'page' + (PAGES[i] === name ? ' active' : '');
+    var b = document.getElementById('nav-' + PAGES[i]);
+    if (b) b.className = 'nav-btn' + (PAGES[i] === name ? ' active' : '');
+  }
+  currentPage = name;
+  if (name === 'console') fetchConsole();
+  if (name === 'jobs') fetchJobs();
+}
+
+function toggleConnection() {
+  var content = document.getElementById('connection-content');
+  var arrow = document.getElementById('connection-arrow');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    arrow.innerHTML = '&#9650;';
+  } else {
+    content.style.display = 'none';
+    arrow.innerHTML = '&#9660;';
+  }
+}
+
+function saveSettings() {
+  var ip = document.getElementById('moonraker-ip').value.trim();
+  var port = document.getElementById('moonraker-port').value.trim() || '7125';
+  if (!ip) { showToast('Enter IP address'); return; }
+  localStorage.setItem('moonraker_ip', ip);
+  localStorage.setItem('moonraker_port', port);
+  BASE_URL = 'http://' + ip + ':' + port;
+  showToast('Saved! Connecting...');
+  refreshAll();
+}
+
+function loadSettings() {
+  var ip = localStorage.getItem('moonraker_ip') || '';
+  var port = localStorage.getItem('moonraker_port') || '7125';
+  document.getElementById('moonraker-ip').value = ip;
+  document.getElementById('moonraker-port').value = port;
+  BASE_URL = ip ? 'http://' + ip + ':' + port : '';
+}
+
+function apiGet(path, cb) {
+  if (!BASE_URL) { setStatus('Not connected', 'red'); return; }
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', BASE_URL + path, true);
+  xhr.timeout = 5000;
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      if (xhr.status === 200) {
+        try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
+      } else {
+        setStatus('Connection error', 'red');
+      }
+    }
+  };
+  xhr.ontimeout = function() { setStatus('Timeout', 'red'); };
+  xhr.send();
+}
+
+function apiPost(path, data, cb) {
+  if (!BASE_URL) { setStatus('Not connected', 'red'); return; }
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', BASE_URL + path, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.timeout = 5000;
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      if (xhr.status === 200) {
+        if (cb) try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
+      } else {
+        showToast('Error: ' + xhr.status);
+      }
+    }
+  };
+  xhr.send(data ? JSON.stringify(data) : null);
+}
+
+function formatTime(seconds) {
+  if (!seconds || seconds < 0) return '--:--:--';
+  var s = Math.floor(seconds);
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  var sec = s % 60;
+  return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function formatFileSize(bytes) {
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  return Math.round(bytes / 1024) + ' KB';
+}
+
+function formatDate(ts) {
+  var d = new Date(ts * 1000);
+  var day = d.getDate(); var mon = d.getMonth() + 1; var yr = String(d.getFullYear()).slice(2);
+  var h = d.getHours(); var min = d.getMinutes();
+  return (day < 10 ? '0' : '') + day + '/' + (mon < 10 ? '0' : '') + mon + '/' + yr + ' ' +
+         (h < 10 ? '0' : '') + h + ':' + (min < 10 ? '0' : '') + min;
+}
+
+function refreshAll() {
+  fetchTemps();
+  fetchPrintStatus();
+  if (currentPage === 'console') fetchConsole();
+}
+
+function fetchTemps() {
+  apiGet('/printer/objects/query?extruder&heater_bed', function(data) {
+    setStatus('Connected', 'green');
+    var r = data.result && data.result.status;
+    if (!r) return;
+    if (r.extruder) {
+      document.getElementById('hotend-temp').textContent = r.extruder.temperature.toFixed(1) + '°';
+      document.getElementById('hotend-target').textContent = 'target: ' + r.extruder.target.toFixed(0) + '°';
+      filHotendTemp = r.extruder.temperature;
+      filHotendTarget = r.extruder.target;
+      updateFilamentTempDisplay();
+    }
+    if (r.heater_bed) {
+      document.getElementById('bed-temp').textContent = r.heater_bed.temperature.toFixed(1) + '°';
+      document.getElementById('bed-target').textContent = 'target: ' + r.heater_bed.target.toFixed(0) + '°';
+    }
+  });
+}
+
+function fetchPrintStatus() {
+  apiGet('/printer/objects/query?print_stats&display_status', function(data) {
+    var r = data.result && data.result.status;
+    if (!r) return;
+    var ps = r.print_stats;
+    var ds = r.display_status;
+
+    if (ps) {
+      var state = ps.state || 'unknown';
+      document.getElementById('print-state').textContent = state.charAt(0).toUpperCase() + state.slice(1);
+      var dot = document.getElementById('print-dot');
+      dot.className = 'status-dot ' + (state === 'printing' ? 'dot-green' : state === 'paused' ? 'dot-yellow' : 'dot-red');
+
+      if (ps.filename) {
+        lastFilename = ps.filename;
+        document.getElementById('print-filename').textContent = 'File: ' + ps.filename;
+        if (ps.filename !== cachedMetaFile) fetchFileMeta(ps.filename);
+      } else {
+        document.getElementById('print-filename').textContent = '';
+      }
+
+      var elapsed = ps.print_duration || 0;
+      var remaining = (cachedEstimatedTime > 0 && elapsed > 0) ? (cachedEstimatedTime - elapsed) : 0;
+      document.getElementById('print-times').textContent =
+        elapsed > 0 ? ('Elapsed: ' + formatTime(elapsed) + '  Remaining: ' + formatTime(remaining)) : '';
+
+      updatePrintButtons(state);
+    }
+
+    if (ds) {
+      var pct = Math.round((ds.progress || 0) * 100);
+      document.getElementById('print-percent').textContent = pct + '%';
+      document.getElementById('print-progress-bar').style.width = pct + '%';
+
+      var msgEl = document.getElementById('print-msg');
+      if (ds.message) {
+        msgEl.textContent = ds.message;
+        msgEl.style.display = 'block';
+      } else {
+        msgEl.style.display = 'none';
+      }
+    }
+  });
+}
+
+function fetchFileMeta(filename) {
+  apiGet('/server/files/metadata?filename=' + encodeURIComponent(filename), function(data) {
+    var r = data.result;
+    if (!r) return;
+    cachedMetaFile = filename;
+    cachedEstimatedTime = r.estimated_time || 0;
+    cachedFilamentTotal = r.filament_total || 0;
+    var filEl = document.getElementById('print-filament');
+    if (cachedFilamentTotal > 0) {
+      filEl.textContent = 'Filament: ' + (cachedFilamentTotal / 1000).toFixed(1) + 'm';
+    } else {
+      filEl.textContent = '';
+    }
+  });
+}
+
+function updatePrintButtons(state) {
+  var pause = document.getElementById('btn-pause');
+  var resume = document.getElementById('btn-resume');
+  var cancel = document.getElementById('btn-cancel');
+  var reprint = document.getElementById('btn-reprint');
+
+  pause.style.display = 'none';
+  resume.style.display = 'none';
+  cancel.style.display = 'none';
+  reprint.style.display = 'none';
+
+  if (state === 'printing') {
+    pause.style.display = '';
+    cancel.style.display = '';
+  } else if (state === 'paused') {
+    resume.style.display = '';
+    cancel.style.display = '';
+  } else if (state === 'complete') {
+    reprint.style.display = '';
+  }
+}
+
+function reprintLast() {
+  if (!lastFilename) { showToast('No file to reprint'); return; }
+  apiPost('/printer/print/start', { filename: lastFilename }, function() {
+    showToast('Reprinting: ' + lastFilename);
+  });
+}
+
+function setTemp(heater, inputId, forceVal) {
+  var temp = forceVal !== undefined ? forceVal : parseInt(document.getElementById(inputId).value);
+  if (isNaN(temp)) { showToast('Enter temperature'); return; }
+  sendGcode('SET_HEATER_TEMPERATURE HEATER=' + heater + ' TARGET=' + temp);
+  showToast('Set ' + heater + ' to ' + temp + '°C');
+}
+
+function setFan() {
+  var val = parseInt(document.getElementById('fan-speed').value);
+  if (isNaN(val)) { showToast('Enter fan value 0-255'); return; }
+  val = Math.min(255, Math.max(0, val));
+  sendGcode('M106 S' + val);
+  showToast('Fan set to ' + val);
+}
+
+function setSpeed() {
+  var val = parseInt(document.getElementById('print-speed').value);
+  if (isNaN(val)) { showToast('Enter speed %'); return; }
+  sendGcode('M220 S' + val);
+  showToast('Speed set to ' + val + '%');
+}
+
+function move(axis, dir) {
+  var step = parseFloat(document.getElementById('move-step').value);
+  var dist = dir * step;
+  sendGcode('G91\nG1 ' + axis + dist + ' F3000\nG90');
+}
+
+function printAction(action) {
+  var path = '/printer/print/' + action;
+  apiPost(path, null, function() { showToast(action + ' sent'); setTimeout(fetchPrintStatus, 1000); });
+}
+
+function sendGcode(cmd) {
+  apiPost('/printer/gcode/script', { script: cmd }, function() {});
+}
+
+function sendCustomGcode() {
+  var cmd = document.getElementById('custom-gcode').value.trim();
+  if (!cmd) return;
+  sendGcode(cmd);
+  showToast('Sent: ' + cmd);
+}
+
+// ===== CONSOLE =====
+
+function fetchConsole() {
+  apiGet('/server/gcode_store?count=100', function(data) {
+    var r = data.result && data.result.gcode_store;
+    if (!r) return;
+    var log = document.getElementById('console-log');
+    var newEntries = [];
+    for (var i = 0; i < r.length; i++) {
+      if (r[i].time > lastConsoleTime) newEntries.push(r[i]);
+    }
+    if (newEntries.length === 0) return;
+    lastConsoleTime = newEntries[newEntries.length - 1].time;
+
+    var shouldScroll = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+
+    for (var j = 0; j < newEntries.length; j++) {
+      var entry = newEntries[j];
+      var div = document.createElement('div');
+      var msg = entry.message || '';
+      if (entry.type === 'command') {
+        div.className = 'log-cmd';
+        div.textContent = '> ' + msg;
+      } else if (msg.indexOf('!!') === 0 || entry.type === 'error') {
+        div.className = 'log-err';
+        div.textContent = msg;
+      } else {
+        div.className = 'log-resp';
+        div.textContent = msg;
+      }
+      log.appendChild(div);
+    }
+
+    if (!consoleUserScrolled || shouldScroll) {
+      log.scrollTop = log.scrollHeight;
+    }
+  });
+}
+
+function sendConsoleCmd() {
+  var input = document.getElementById('console-input');
+  var cmd = input.value.trim();
+  if (!cmd) return;
+  input.value = '';
+  sendGcode(cmd);
+  showToast('Sent: ' + cmd);
+  setTimeout(fetchConsole, 500);
+}
+
+function clearConsole() {
+  document.getElementById('console-log').innerHTML = '';
+  lastConsoleTime = 0;
+}
+
+(function() {
+  var log = document.getElementById('console-log');
+  if (log) {
+    log.addEventListener('scroll', function() {
+      consoleUserScrolled = log.scrollTop + log.clientHeight < log.scrollHeight - 20;
+    });
+  }
+})();
+
+// ===== CALIBRATE =====
+
+function startCalibrate(cmd) {
+  sendGcode(cmd);
+  document.getElementById('cal-adj-panel').style.display = 'block';
+  document.getElementById('cal-save-row').style.display = 'none';
+  showToast(cmd + ' sent');
+}
+
+function testz(val) {
+  sendGcode('TESTZ Z=' + val);
+  showToast('TESTZ Z=' + val);
+}
+
+function calAccept() {
+  sendGcode('ACCEPT');
+  document.getElementById('cal-save-row').style.display = 'block';
+  showToast('ACCEPT sent');
+}
+
+function calAbort() {
+  sendGcode('ABORT');
+  document.getElementById('cal-adj-panel').style.display = 'none';
+  showToast('ABORT sent');
+}
+
+function calSaveConfig() {
+  sendGcode('SAVE_CONFIG');
+  showToast('SAVE_CONFIG sent — printer will restart');
+}
+
+// ===== JOBS =====
+
+var currentPrintingFile = '';
+
+function fetchJobs() {
+  apiGet('/server/files/list?root=gcodes', function(data) {
+    var files = data.result;
+    if (!files || !files.length) {
+      document.getElementById('jobs-list').innerHTML = '<p style="color:#888;font-size:13px;">No files found.</p>';
+      return;
+    }
+    files.sort(function(a, b) { return b.modified - a.modified; });
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var isPrinting = f.filename === currentPrintingFile;
+      html += '<div class="job-row' + (isPrinting ? ' printing' : '') + '">';
+      html += '<div class="job-info">';
+      html += '<div class="job-name">' + escHtml(f.filename) + '</div>';
+      html += '<div class="job-meta">' + formatFileSize(f.size) + ' &nbsp; ' + formatDate(f.modified) + '</div>';
+      html += '</div>';
+      html += '<button onclick="startJob(' + "'" + escHtml(f.filename) + "'" + ')" style="-webkit-flex:none;flex:none;padding:6px 10px;font-size:12px;">Print</button>';
+      html += '</div>';
+    }
+    document.getElementById('jobs-list').innerHTML = html;
+  });
+}
+
+function startJob(filename) {
+  if (!confirm('Print: ' + filename + '?')) return;
+  apiPost('/printer/print/start', { filename: filename }, function() {
+    showToast('Starting: ' + filename);
+    setTimeout(function() { showPage('main'); }, 500);
+  });
+}
+
+function escHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ===== FILAMENT =====
+
+function updateFilamentTempDisplay() {
+  var el = document.getElementById('fil-hotend-temp');
+  var ready = document.getElementById('fil-temp-ready');
+  if (!el) return;
+  el.textContent = filHotendTemp.toFixed(1) + '°C';
+  if (filHotendTarget > 0 && filHotendTemp >= filHotendTarget - 3) {
+    ready.textContent = 'Ready';
+    ready.className = 'temp-ready ready';
+  } else if (filHotendTarget > 0) {
+    ready.textContent = 'Heating...';
+    ready.className = 'temp-ready not-ready';
+  } else {
+    ready.textContent = 'Not ready';
+    ready.className = 'temp-ready not-ready';
+  }
+}
+
+function preheat(temp) {
+  sendGcode('SET_HEATER_TEMPERATURE HEATER=extruder TARGET=' + temp);
+  showToast('Hotend target: ' + temp + '°C');
+}
+
+function preheatCustom() {
+  var val = parseInt(document.getElementById('fil-temp').value);
+  if (isNaN(val)) { showToast('Enter temperature'); return; }
+  preheat(val);
+}
+
+function filament(action, mm) {
+  var cmd;
+  if (action === 'retract') {
+    cmd = 'G91\nG1 E-' + mm + ' F300\nG90';
+  } else if (action === 'load') {
+    cmd = 'G91\nG1 E' + mm + ' F300\nG90';
+  } else if (action === 'purge') {
+    cmd = 'G91\nG1 E' + mm + ' F150\nG90';
+  }
+  sendGcode(cmd);
+  showToast(action + ' ' + mm + 'mm');
+}
+
+// ===== STATUS / TOAST =====
+
+function setStatus(msg, color) {
+  var el = document.getElementById('status-bar');
+  el.textContent = msg;
+  el.style.background = color === 'green' ? '#1a4731' : color === 'red' ? '#4a1a1a' : '#0f3460';
+  var dot = document.getElementById('conn-dot');
+  var label = document.getElementById('conn-label');
+  dot.className = 'status-dot ' + (color === 'green' ? 'dot-green' : 'dot-red');
+  label.textContent = msg;
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function() { t.style.display = 'none'; }, 2500);
+}
+
+// ===== INIT =====
+
+loadSettings();
+if (BASE_URL) refreshAll();
+refreshTimer = setInterval(function() {
+  refreshAll();
+  if (currentPage === 'filament') updateFilamentTempDisplay();
+}, 5000);
+</script>
+</body>
+</html>
