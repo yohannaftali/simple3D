@@ -119,7 +119,7 @@
   /* Print status extra fields */
   .print-meta { font-size: 12px; color: #aaa; margin-top: 4px; }
   .print-meta > * + * { margin-top: 2px; }
-  .print-msg { font-size: 13px; color: #f0c040; margin-top: 4px; font-style: italic; }
+  .print-msg { font-size: 13px; color: #f0c040; margin-top: 6px; padding: 4px 8px; background: rgba(240,192,64,0.1); border-left: 3px solid #f0c040; border-radius: 2px; }
 
   /* Console */
   #page-console .container { max-width: 100%; padding: 8px; height: 100%; }
@@ -656,8 +656,9 @@ function fetchPrintStatus() {
       document.getElementById('print-progress-bar').style.width = pct + '%';
 
       var msgEl = document.getElementById('print-msg');
-      if (ds.message) {
-        msgEl.textContent = ds.message;
+      var msg = (ds.message !== null && ds.message !== undefined) ? String(ds.message).trim() : '';
+      if (msg) {
+        msgEl.textContent = msg;
         msgEl.style.display = 'block';
       } else {
         msgEl.style.display = 'none';
@@ -864,13 +865,14 @@ function fetchJobs() {
     var html = '';
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
-      var isPrinting = f.filename === currentPrintingFile;
+      var fname = f.path || f.filename || '';
+      var isPrinting = fname === currentPrintingFile;
       html += '<div class="job-row' + (isPrinting ? ' printing' : '') + '">';
       html += '<div class="job-info">';
-      html += '<div class="job-name">' + escHtml(f.filename) + '</div>';
+      html += '<div class="job-name">' + escHtml(fname) + '</div>';
       html += '<div class="job-meta">' + formatFileSize(f.size) + ' &nbsp; ' + formatDate(f.modified) + '</div>';
       html += '</div>';
-      html += '<button onclick="startJob(' + "'" + escHtml(f.filename) + "'" + ')" style="-webkit-flex:none;flex:none;padding:6px 10px;font-size:12px;">Print</button>';
+      html += '<button onclick="startJob(\'' + escHtml(fname).replace(/'/g, "\\'") + '\')" style="-webkit-flex:none;flex:none;padding:6px 10px;font-size:12px;">Print</button>';
       html += '</div>';
     }
     document.getElementById('jobs-list').innerHTML = html;
@@ -881,7 +883,6 @@ function startJob(filename) {
   if (!confirm('Print: ' + filename + '?')) return;
   apiPost('/printer/print/start', { filename: filename }, function() {
     showToast('Starting: ' + filename);
-    setTimeout(function() { showPage('main'); }, 500);
   });
 }
 
