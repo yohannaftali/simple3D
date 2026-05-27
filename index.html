@@ -476,24 +476,40 @@
 
 <script>
 var BASE_URL = '';
-var refreshTimer = null;
+var WS_URL = '';
 var currentPage = 'main';
 
-// Phase 2 state
+// WebSocket
+var ws = null;
+var wsReconnectTimer = null;
+var printerStatus = {};
+
+// Print state
 var lastFilename = '';
+var currentPrintingFile = '';
 var cachedMetaFile = '';
 var cachedEstimatedTime = 0;
 var cachedFilamentTotal = 0;
 
-// Console state
+// Console
 var lastConsoleTime = 0;
+var consoleTimer = null;
 var consoleUserScrolled = false;
 
-// Filament state
+// Filament
 var filHotendTemp = 0;
 var filHotendTarget = 0;
 
 var PAGES = ['main', 'console', 'calibrate', 'jobs', 'filament'];
+
+var WS_OBJECTS = {
+  extruder: ['temperature', 'target'],
+  heater_bed: ['temperature', 'target'],
+  print_stats: ['state', 'filename', 'print_duration', 'filament_used'],
+  display_status: ['progress', 'message']
+};
+
+// ===== NAVIGATION =====
 
 function showPage(name) {
   for (var i = 0; i < PAGES.length; i++) {
@@ -503,9 +519,18 @@ function showPage(name) {
     if (b) b.className = 'nav-btn' + (PAGES[i] === name ? ' active' : '');
   }
   currentPage = name;
-  if (name === 'console') fetchConsole();
+  clearInterval(consoleTimer);
+  consoleTimer = null;
+  if (name === 'console') {
+    fetchConsole();
+    consoleTimer = setInterval(function() {
+      if (currentPage === 'console') fetchConsole();
+    }, 3000);
+  }
   if (name === 'jobs') fetchJobs();
 }
+
+// ===== SETTINGS =====
 
 function toggleConnection() {
   var content = document.getElementById('connection-content');
@@ -526,8 +551,10 @@ function saveSettings() {
   localStorage.setItem('moonraker_ip', ip);
   localStorage.setItem('moonraker_port', port);
   BASE_URL = 'http://' + ip + ':' + port;
+  WS_URL = 'ws://' + ip + ':' + port + '/websocket';
   showToast('Saved! Connecting...');
-  refreshAll();
+  disconnectWS();
+  connectWS();
 }
 
 function loadSettings() {
@@ -535,29 +562,192 @@ function loadSettings() {
   var port = localStorage.getItem('moonraker_port') || '7125';
   document.getElementById('moonraker-ip').value = ip;
   document.getElementById('moonraker-port').value = port;
-  BASE_URL = ip ? 'http://' + ip + ':' + port : '';
+  if (ip) {
+    BASE_URL = 'http://' + ip + ':' + port;
+    WS_URL = 'ws://' + ip + ':' + port + '/websocket';
+  }
 }
 
+// ===== WEBSOCKET =====
+
+function connectWS() {
+  if (!WS_URL) return;
+  if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+  clearTimeout(wsReconnectTimer);
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch(e) {
+    setStatus('WS error', 'red');
+    scheduleReconnect();
+    return;
+  }
+  ws.onopen = function() {
+    wsSubscribe();
+  };
+  ws.onmessage = function(e) {
+    var data;
+    try { data = JSON.parse(e.data); } catch(ex) { return; }
+    handleWSMessage(data);
+  };
+  ws.onclose = function() {
+    setStatus('Disconnected', 'red');
+    scheduleReconnect();
+  };
+  ws.onerror = function() { /* onclose fires after onerror and handles reconnect */ };
+}
+
+function disconnectWS() {
+  clearTimeout(wsReconnectTimer);
+  if (ws) {
+    ws.onclose = null;
+    ws.onerror = null;
+    ws.close();
+    ws = null;
+  }
+}
+
+function wsSubscribe() {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'printer.objects.subscribe',
+    params: { objects: WS_OBJECTS },
+    id: 1
+  }));
+}
+
+function scheduleReconnect() {
+  wsReconnectTimer = setTimeout(connectWS, 3000);
+}
+
+function refreshAll() {
+  if (!ws || ws.readyState !== 1) {
+    connectWS();
+  } else {
+    wsSubscribe();
+  }
+}
+
+function handleWSMessage(data) {
+  // Response to subscribe request
+  if (data.id === 1 && data.result) {
+    setStatus('Connected', 'green');
+    if (data.result.status) {
+      mergeDeep(printerStatus, data.result.status);
+      updateTempsUI();
+      updatePrintStatusUI();
+    }
+    return;
+  }
+  if (!data.method) return;
+  if (data.method === 'notify_status_update') {
+    var changed = data.params && data.params[0];
+    if (changed) {
+      mergeDeep(printerStatus, changed);
+      updateTempsUI();
+      updatePrintStatusUI();
+    }
+  } else if (data.method === 'notify_klippy_ready') {
+    setStatus('Connected', 'green');
+    wsSubscribe();
+  } else if (data.method === 'notify_klippy_disconnected') {
+    setStatus('Klipper offline', 'red');
+  } else if (data.method === 'notify_klippy_shutdown') {
+    setStatus('Klipper shutdown', 'red');
+  }
+}
+
+function mergeDeep(target, source) {
+  for (var key in source) {
+    if (!source.hasOwnProperty(key)) continue;
+    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+      mergeDeep(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+}
+
+// ===== UI UPDATE FROM STATE =====
+
+function updateTempsUI() {
+  var ext = printerStatus.extruder;
+  var bed = printerStatus.heater_bed;
+  if (ext) {
+    if (ext.temperature !== undefined) {
+      document.getElementById('hotend-temp').textContent = ext.temperature.toFixed(1) + '°';
+      filHotendTemp = ext.temperature;
+    }
+    if (ext.target !== undefined) {
+      document.getElementById('hotend-target').textContent = 'target: ' + ext.target.toFixed(0) + '°';
+      filHotendTarget = ext.target;
+    }
+    updateFilamentTempDisplay();
+  }
+  if (bed) {
+    if (bed.temperature !== undefined)
+      document.getElementById('bed-temp').textContent = bed.temperature.toFixed(1) + '°';
+    if (bed.target !== undefined)
+      document.getElementById('bed-target').textContent = 'target: ' + bed.target.toFixed(0) + '°';
+  }
+}
+
+function updatePrintStatusUI() {
+  var ps = printerStatus.print_stats;
+  var ds = printerStatus.display_status;
+  if (ps) {
+    var state = ps.state || 'unknown';
+    document.getElementById('print-state').textContent = state.charAt(0).toUpperCase() + state.slice(1);
+    var dot = document.getElementById('print-dot');
+    dot.className = 'status-dot ' + (state === 'printing' ? 'dot-green' : state === 'paused' ? 'dot-yellow' : 'dot-red');
+    if (ps.filename) {
+      lastFilename = ps.filename;
+      currentPrintingFile = ps.filename;
+      document.getElementById('print-filename').textContent = 'File: ' + ps.filename;
+      if (ps.filename !== cachedMetaFile) fetchFileMeta(ps.filename);
+    } else {
+      currentPrintingFile = '';
+      document.getElementById('print-filename').textContent = '';
+    }
+    var elapsed = ps.print_duration || 0;
+    var remaining = (cachedEstimatedTime > 0 && elapsed > 0) ? (cachedEstimatedTime - elapsed) : 0;
+    document.getElementById('print-times').textContent =
+      elapsed > 0 ? ('Elapsed: ' + formatTime(elapsed) + '  Remaining: ' + formatTime(remaining)) : '';
+    updatePrintButtons(state);
+  }
+  if (ds) {
+    var pct = Math.round((ds.progress || 0) * 100);
+    document.getElementById('print-percent').textContent = pct + '%';
+    document.getElementById('print-progress-bar').style.width = pct + '%';
+    var msgEl = document.getElementById('print-msg');
+    var msg = (ds.message !== null && ds.message !== undefined) ? String(ds.message).trim() : '';
+    if (msg) {
+      msgEl.textContent = msg;
+      msgEl.style.display = 'block';
+    } else {
+      msgEl.style.display = 'none';
+    }
+  }
+}
+
+// ===== XHR API (one-shot requests) =====
+
 function apiGet(path, cb) {
-  if (!BASE_URL) { setStatus('Not connected', 'red'); return; }
+  if (!BASE_URL) return;
   var xhr = new XMLHttpRequest();
   xhr.open('GET', BASE_URL + path, true);
   xhr.timeout = 5000;
   xhr.onreadystatechange = function() {
-    if (xhr.readyState === 4) {
-      if (xhr.status === 200) {
-        try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
-      } else {
-        setStatus('Connection error', 'red');
-      }
+    if (xhr.readyState === 4 && xhr.status === 200) {
+      try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
     }
   };
-  xhr.ontimeout = function() { setStatus('Timeout', 'red'); };
   xhr.send();
 }
 
 function apiPost(path, data, cb) {
-  if (!BASE_URL) { setStatus('Not connected', 'red'); return; }
+  if (!BASE_URL) return;
   var xhr = new XMLHttpRequest();
   xhr.open('POST', BASE_URL + path, true);
   xhr.setRequestHeader('Content-Type', 'application/json');
@@ -573,6 +763,8 @@ function apiPost(path, data, cb) {
   };
   xhr.send(data ? JSON.stringify(data) : null);
 }
+
+// ===== HELPERS =====
 
 function formatTime(seconds) {
   if (!seconds || seconds < 0) return '--:--:--';
@@ -596,76 +788,7 @@ function formatDate(ts) {
          (h < 10 ? '0' : '') + h + ':' + (min < 10 ? '0' : '') + min;
 }
 
-function refreshAll() {
-  fetchTemps();
-  fetchPrintStatus();
-  if (currentPage === 'console') fetchConsole();
-}
-
-function fetchTemps() {
-  apiGet('/printer/objects/query?extruder&heater_bed', function(data) {
-    setStatus('Connected', 'green');
-    var r = data.result && data.result.status;
-    if (!r) return;
-    if (r.extruder) {
-      document.getElementById('hotend-temp').textContent = r.extruder.temperature.toFixed(1) + '°';
-      document.getElementById('hotend-target').textContent = 'target: ' + r.extruder.target.toFixed(0) + '°';
-      filHotendTemp = r.extruder.temperature;
-      filHotendTarget = r.extruder.target;
-      updateFilamentTempDisplay();
-    }
-    if (r.heater_bed) {
-      document.getElementById('bed-temp').textContent = r.heater_bed.temperature.toFixed(1) + '°';
-      document.getElementById('bed-target').textContent = 'target: ' + r.heater_bed.target.toFixed(0) + '°';
-    }
-  });
-}
-
-function fetchPrintStatus() {
-  apiGet('/printer/objects/query?print_stats&display_status', function(data) {
-    var r = data.result && data.result.status;
-    if (!r) return;
-    var ps = r.print_stats;
-    var ds = r.display_status;
-
-    if (ps) {
-      var state = ps.state || 'unknown';
-      document.getElementById('print-state').textContent = state.charAt(0).toUpperCase() + state.slice(1);
-      var dot = document.getElementById('print-dot');
-      dot.className = 'status-dot ' + (state === 'printing' ? 'dot-green' : state === 'paused' ? 'dot-yellow' : 'dot-red');
-
-      if (ps.filename) {
-        lastFilename = ps.filename;
-        document.getElementById('print-filename').textContent = 'File: ' + ps.filename;
-        if (ps.filename !== cachedMetaFile) fetchFileMeta(ps.filename);
-      } else {
-        document.getElementById('print-filename').textContent = '';
-      }
-
-      var elapsed = ps.print_duration || 0;
-      var remaining = (cachedEstimatedTime > 0 && elapsed > 0) ? (cachedEstimatedTime - elapsed) : 0;
-      document.getElementById('print-times').textContent =
-        elapsed > 0 ? ('Elapsed: ' + formatTime(elapsed) + '  Remaining: ' + formatTime(remaining)) : '';
-
-      updatePrintButtons(state);
-    }
-
-    if (ds) {
-      var pct = Math.round((ds.progress || 0) * 100);
-      document.getElementById('print-percent').textContent = pct + '%';
-      document.getElementById('print-progress-bar').style.width = pct + '%';
-
-      var msgEl = document.getElementById('print-msg');
-      var msg = (ds.message !== null && ds.message !== undefined) ? String(ds.message).trim() : '';
-      if (msg) {
-        msgEl.textContent = msg;
-        msgEl.style.display = 'block';
-      } else {
-        msgEl.style.display = 'none';
-      }
-    }
-  });
-}
+// ===== PRINT CONTROLS =====
 
 function fetchFileMeta(filename) {
   apiGet('/server/files/metadata?filename=' + encodeURIComponent(filename), function(data) {
@@ -675,11 +798,7 @@ function fetchFileMeta(filename) {
     cachedEstimatedTime = r.estimated_time || 0;
     cachedFilamentTotal = r.filament_total || 0;
     var filEl = document.getElementById('print-filament');
-    if (cachedFilamentTotal > 0) {
-      filEl.textContent = 'Filament: ' + (cachedFilamentTotal / 1000).toFixed(1) + 'm';
-    } else {
-      filEl.textContent = '';
-    }
+    filEl.textContent = cachedFilamentTotal > 0 ? ('Filament: ' + (cachedFilamentTotal / 1000).toFixed(1) + 'm') : '';
   });
 }
 
@@ -688,12 +807,10 @@ function updatePrintButtons(state) {
   var resume = document.getElementById('btn-resume');
   var cancel = document.getElementById('btn-cancel');
   var reprint = document.getElementById('btn-reprint');
-
   pause.style.display = 'none';
   resume.style.display = 'none';
   cancel.style.display = 'none';
   reprint.style.display = 'none';
-
   if (state === 'printing') {
     pause.style.display = '';
     cancel.style.display = '';
@@ -710,6 +827,10 @@ function reprintLast() {
   apiPost('/printer/print/start', { filename: lastFilename }, function() {
     showToast('Reprinting: ' + lastFilename);
   });
+}
+
+function printAction(action) {
+  apiPost('/printer/print/' + action, null, function() { showToast(action + ' sent'); });
 }
 
 function setTemp(heater, inputId, forceVal) {
@@ -740,11 +861,6 @@ function move(axis, dir) {
   sendGcode('G91\nG1 ' + axis + dist + ' F3000\nG90');
 }
 
-function printAction(action) {
-  var path = '/printer/print/' + action;
-  apiPost(path, null, function() { showToast(action + ' sent'); setTimeout(fetchPrintStatus, 1000); });
-}
-
 function sendGcode(cmd) {
   apiPost('/printer/gcode/script', { script: cmd }, function() {});
 }
@@ -769,9 +885,7 @@ function fetchConsole() {
     }
     if (newEntries.length === 0) return;
     lastConsoleTime = newEntries[newEntries.length - 1].time;
-
     var shouldScroll = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
-
     for (var j = 0; j < newEntries.length; j++) {
       var entry = newEntries[j];
       var div = document.createElement('div');
@@ -788,10 +902,7 @@ function fetchConsole() {
       }
       log.appendChild(div);
     }
-
-    if (!consoleUserScrolled || shouldScroll) {
-      log.scrollTop = log.scrollHeight;
-    }
+    if (!consoleUserScrolled || shouldScroll) log.scrollTop = log.scrollHeight;
   });
 }
 
@@ -851,8 +962,6 @@ function calSaveConfig() {
 }
 
 // ===== JOBS =====
-
-var currentPrintingFile = '';
 
 function fetchJobs() {
   apiGet('/server/files/list?root=gcodes', function(data) {
@@ -956,11 +1065,7 @@ function showToast(msg) {
 // ===== INIT =====
 
 loadSettings();
-if (BASE_URL) refreshAll();
-refreshTimer = setInterval(function() {
-  refreshAll();
-  if (currentPage === 'filament') updateFilamentTempDisplay();
-}, 5000);
+if (WS_URL) connectWS();
 </script>
 </body>
 </html>
