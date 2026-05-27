@@ -163,6 +163,40 @@
   .temp-ready.ready { color: #27ae60; }
   .temp-ready.not-ready { color: #e67e22; }
 
+  /* Temp/fan row layout */
+  .tl { font-size: 13px; color: #aaa; min-width: 68px; -webkit-flex: none; flex: none; }
+  .tv { min-width: 56px; -webkit-flex: none; flex: none; }
+  .tv-n { font-size: 16px; font-weight: bold; color: #fff; line-height: 1.2; }
+  .tv-s { font-size: 11px; color: #888; }
+  .row-info { min-height: 36px; }
+
+  /* Macro list */
+  .macro-grid { display: grid; grid-template-columns: repeat(2, 1fr); grid-gap: 6px; }
+  #macro-list { max-height: 140px; overflow-y: auto; }
+
+  /* Card collapsible + drag */
+  .card-header {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    margin-bottom: 8px;
+  }
+  .card-title { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 16px; color: #a0c4ff; margin: 0; }
+  .card-arrow { font-size: 11px; color: #555; margin-left: 6px; -webkit-flex: none; flex: none; }
+  .drag-handle { font-size: 18px; color: #333; padding-right: 8px; -webkit-flex: none; flex: none; -webkit-user-select: none; user-select: none; }
+  .drag-ghost { position: fixed; z-index: 500; opacity: 0.88; pointer-events: none; box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
+  .drag-placeholder { border: 2px dashed #2a5298; border-radius: 8px; background: rgba(42,82,152,0.08); margin-bottom: 12px; }
+  /* Mini console on main page */
+  #mini-console-log {
+    background: #0a0a1a; border-radius: 6px; padding: 6px 8px;
+    font-family: monospace; font-size: 11px; line-height: 1.4;
+    overflow-y: auto; height: 110px; word-break: break-all;
+  }
+  #mini-console-log .log-cmd { color: #a0c4ff; }
+  #mini-console-log .log-resp { color: #ccc; }
+  #mini-console-log .log-err { color: #e74c3c; }
+
   /* ===== LANDSCAPE ===== */
   @media (orientation: landscape) {
     #page-main { overflow: hidden; height: calc(100vh - 44px); }
@@ -173,7 +207,7 @@
       max-width: 100%; width: 100%; height: 100%;
       padding: 4px; overflow: hidden;
     }
-    #connection-card { width: 100%; margin-bottom: 4px; }
+    #card-connection { width: 100%; margin-bottom: 4px; }
     .col-left { width: 45%; padding-right: 4px; }
     .col-right { width: 55%; }
     .card { padding: 8px; margin-bottom: 4px; }
@@ -188,6 +222,12 @@
     label { font-size: 12px; }
     .move-grid { grid-gap: 4px; }
     #status-bar { padding: 4px 8px; margin-top: 6px; font-size: 12px; }
+    .tl { font-size: 12px; min-width: 58px; }
+    .tv-n { font-size: 14px; }
+    .row-info { min-height: 28px; }
+    #macro-list { max-height: 72px; }
+    .card-title { font-size: 13px; }
+    #mini-console-log { height: 64px; }
   }
 </style>
 </head>
@@ -197,18 +237,17 @@
 <div class="page active" id="page-main">
   <div class="container">
 
-    <!-- Connection card (accordion) -->
-    <div class="card" id="connection-card">
-      <div class="accordion-header" onclick="toggleConnection()">
-        <h2>Connection</h2>
-        <div class="accordion-status">
-          <span class="status-dot dot-red" id="conn-dot" style="margin-right:5px;"></span>
-          <span id="conn-label" style="font-size:12px;color:#aaa;">Not connected</span>
-        </div>
-        <span class="accordion-arrow" id="connection-arrow">&#9650;</span>
+    <!-- Connection card -->
+    <div class="card" id="card-connection">
+      <div class="card-header" onclick="toggleCard('card-connection')">
+        <span class="drag-handle">&#8801;</span>
+        <span class="card-title">Connection</span>
+        <span class="status-dot dot-red" id="conn-dot" style="margin:0 4px 0 8px;"></span>
+        <span id="conn-label" style="font-size:12px;color:#aaa;-webkit-flex:1;flex:1;">Not connected</span>
+        <span class="card-arrow" id="arr-card-connection">&#9650;</span>
       </div>
-      <div id="connection-content">
-        <div class="settings-row" style="margin-top:10px;margin-bottom:8px;">
+      <div id="body-card-connection">
+        <div class="settings-row" style="margin-bottom:8px;">
           <input type="text" id="moonraker-ip" placeholder="e.g. 192.168.1.100">
           <input type="text" id="moonraker-port" placeholder="Port" value="7125" style="width:80px;-webkit-flex:none;flex:none;">
         </div>
@@ -221,125 +260,189 @@
     </div>
 
     <!-- Left column -->
-    <div class="col-left">
+    <div class="col-left" id="col-left">
 
       <!-- Temperature -->
-      <div class="card">
-        <h2>Temperature</h2>
-        <div class="grid2">
-          <div class="temp-box">
-            <div style="font-size:12px;color:#aaa;">Hotend</div>
-            <div class="temp-value" id="hotend-temp">--</div>
-            <div class="temp-target" id="hotend-target">target: --</div>
-          </div>
-          <div class="temp-box">
-            <div style="font-size:12px;color:#aaa;">Bed</div>
-            <div class="temp-value" id="bed-temp">--</div>
-            <div class="temp-target" id="bed-target">target: --</div>
-          </div>
+      <div class="card" id="card-temperature">
+        <div class="card-header" onclick="toggleCard('card-temperature')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Temperature</span>
+          <span class="card-arrow" id="arr-card-temperature">&#9650;</span>
         </div>
-        <div class="row">
-          <label>Hotend</label>
-          <input type="number" id="set-hotend" placeholder="&#176;C" style="width:70px;-webkit-flex:none;flex:none;">
-          <button onclick="setTemp('extruder', 'set-hotend')">Set</button>
-          <button onclick="setTemp('extruder', null, 0)" class="danger">Off</button>
-        </div>
-        <div class="row" style="margin-bottom:0;">
-          <label>Bed</label>
-          <input type="number" id="set-bed" placeholder="&#176;C" style="width:70px;-webkit-flex:none;flex:none;">
-          <button onclick="setTemp('heater_bed', 'set-bed')">Set</button>
-          <button onclick="setTemp('heater_bed', null, 0)" class="danger">Off</button>
+        <div id="body-card-temperature">
+          <div class="row">
+            <span class="tl"><span style="color:#e74c3c;">&#9679;</span> Hotend</span>
+            <div class="tv"><div class="tv-n" id="hotend-temp">--</div><div class="tv-s" id="hotend-target">--</div></div>
+            <input type="number" id="set-hotend" placeholder="&#176;C" style="width:62px;-webkit-flex:none;flex:none;">
+            <button onclick="setTemp('extruder', 'set-hotend')" style="-webkit-flex:none;flex:none;">Set</button>
+            <button onclick="setTemp('extruder', null, 0)" class="danger" style="-webkit-flex:none;flex:none;">Off</button>
+          </div>
+          <div class="row">
+            <span class="tl"><span style="color:#3498db;">&#9679;</span> Bed</span>
+            <div class="tv"><div class="tv-n" id="bed-temp">--</div><div class="tv-s" id="bed-target">--</div></div>
+            <input type="number" id="set-bed" placeholder="&#176;C" style="width:62px;-webkit-flex:none;flex:none;">
+            <button onclick="setTemp('heater_bed', 'set-bed')" style="-webkit-flex:none;flex:none;">Set</button>
+            <button onclick="setTemp('heater_bed', null, 0)" class="danger" style="-webkit-flex:none;flex:none;">Off</button>
+          </div>
+          <div class="row row-info">
+            <span class="tl"><span style="color:#9b59b6;">&#9679;</span> MCU</span>
+            <div class="tv"><div class="tv-n" id="mcu-temp">--</div></div>
+          </div>
+          <div class="row row-info" style="margin-bottom:0;">
+            <span class="tl"><span style="color:#1abc9c;">&#9679;</span> SOC</span>
+            <div class="tv"><div class="tv-n" id="soc-temp">--</div></div>
+          </div>
         </div>
       </div>
 
       <!-- Fan & Speed -->
-      <div class="card">
-        <h2>Fan &amp; Speed</h2>
-        <div class="row">
-          <label>Fan</label>
-          <input type="number" id="fan-speed" placeholder="0-255" min="0" max="255" style="width:70px;-webkit-flex:none;flex:none;">
-          <button onclick="setFan()">Set</button>
-          <button onclick="sendGcode('M106 S0')" class="danger">Off</button>
+      <div class="card" id="card-fan">
+        <div class="card-header" onclick="toggleCard('card-fan')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Fan &amp; Speed</span>
+          <span class="card-arrow" id="arr-card-fan">&#9650;</span>
         </div>
-        <div class="row" style="margin-bottom:0;">
-          <label>Print %</label>
-          <input type="number" id="print-speed" placeholder="100" style="width:70px;-webkit-flex:none;flex:none;">
-          <button onclick="setSpeed()">Set</button>
+        <div id="body-card-fan">
+          <div class="row">
+            <span class="tl"><span style="color:#e67e22;">&#9679;</span> Fan</span>
+            <div class="tv"><div class="tv-n" id="fan-actual">--%</div></div>
+            <input type="number" id="fan-speed" placeholder="0-255" min="0" max="255" style="width:62px;-webkit-flex:none;flex:none;">
+            <button onclick="setFan()" style="-webkit-flex:none;flex:none;">Set</button>
+            <button onclick="sendGcode('M106 S0')" class="danger" style="-webkit-flex:none;flex:none;">Off</button>
+          </div>
+          <div class="row row-info">
+            <span class="tl"><span style="color:#7f8c8d;">&#9679;</span> Exhaust</span>
+            <div class="tv"><div class="tv-n" id="exhaust-actual">--%</div></div>
+          </div>
+          <div class="row row-info">
+            <span class="tl"><span style="color:#5dade2;">&#9679;</span> Htd Fan</span>
+            <div class="tv"><div class="tv-n" id="hotend-fan-actual">--%</div></div>
+          </div>
+          <div class="row" style="margin-bottom:0;">
+            <span class="tl"><span style="color:#f39c12;">&#9679;</span> Print %</span>
+            <div class="tv"><div class="tv-n" id="speed-actual">--%</div></div>
+            <input type="number" id="print-speed" placeholder="100" style="width:62px;-webkit-flex:none;flex:none;">
+            <button onclick="setSpeed()" style="-webkit-flex:none;flex:none;">Set</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Console Log -->
+      <div class="card" id="card-minilog">
+        <div class="card-header" onclick="toggleCard('card-minilog')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Console Log</span>
+          <button onclick="clearMiniConsole();event.stopPropagation();" style="padding:3px 8px;font-size:11px;-webkit-flex:none;flex:none;margin-left:8px;">Clear</button>
+          <span class="card-arrow" id="arr-card-minilog">&#9650;</span>
+        </div>
+        <div id="body-card-minilog">
+          <div id="mini-console-log"></div>
         </div>
       </div>
 
       <!-- Custom GCode -->
-      <div class="card">
-        <h2>Custom GCode</h2>
-        <div class="settings-row">
-          <input type="text" id="custom-gcode" placeholder="e.g. G28">
-          <button onclick="sendCustomGcode()" style="-webkit-flex:none;flex:none;">Send</button>
+      <div class="card" id="card-gcode">
+        <div class="card-header" onclick="toggleCard('card-gcode')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Custom GCode</span>
+          <span class="card-arrow" id="arr-card-gcode">&#9650;</span>
+        </div>
+        <div id="body-card-gcode">
+          <div class="settings-row">
+            <input type="text" id="custom-gcode" placeholder="e.g. G28">
+            <button onclick="sendCustomGcode()" style="-webkit-flex:none;flex:none;">Send</button>
+          </div>
         </div>
       </div>
 
     </div>
 
     <!-- Right column -->
-    <div class="col-right">
+    <div class="col-right" id="col-right">
 
       <!-- Print Status -->
-      <div class="card">
-        <h2>Print Status</h2>
-        <div class="row" style="margin-bottom:4px;">
-          <span class="status-dot dot-red" id="print-dot" style="margin-right:6px;"></span>
-          <span id="print-state">Unknown</span>
-          <span style="margin-left:auto;font-size:13px;" id="print-percent">0%</span>
+      <div class="card" id="card-status">
+        <div class="card-header" onclick="toggleCard('card-status')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Print Status</span>
+          <span class="card-arrow" id="arr-card-status">&#9650;</span>
         </div>
-        <div id="print-progress"><div id="print-progress-bar"></div></div>
-        <div id="print-msg" class="print-msg" style="display:none;"></div>
-        <div class="print-meta">
-          <div id="print-filename"></div>
-          <div id="print-filament"></div>
-          <div id="print-times"></div>
-        </div>
-        <div class="btn-row" style="margin-top:8px;" id="print-btn-row">
-          <button onclick="printAction('pause')" class="warning" id="btn-pause">Pause</button>
-          <button onclick="printAction('resume')" class="success" id="btn-resume">Resume</button>
-          <button onclick="printAction('cancel')" class="danger" id="btn-cancel">Cancel</button>
-          <button onclick="reprintLast()" class="success" id="btn-reprint" style="display:none;">Reprint</button>
+        <div id="body-card-status">
+          <div class="row" style="margin-bottom:4px;">
+            <span class="status-dot dot-red" id="print-dot" style="margin-right:6px;"></span>
+            <span id="print-state">Unknown</span>
+            <span style="margin-left:auto;font-size:13px;" id="print-percent">0%</span>
+          </div>
+          <div id="print-progress"><div id="print-progress-bar"></div></div>
+          <div id="print-msg" class="print-msg" style="display:none;"></div>
+          <div class="print-meta">
+            <div id="print-filename"></div>
+            <div id="print-filament"></div>
+            <div id="print-times"></div>
+          </div>
+          <div class="btn-row" style="margin-top:8px;" id="print-btn-row">
+            <button onclick="printAction('pause')" class="warning" id="btn-pause">Pause</button>
+            <button onclick="printAction('resume')" class="success" id="btn-resume">Resume</button>
+            <button onclick="printAction('cancel')" class="danger" id="btn-cancel">Cancel</button>
+            <button onclick="reprintLast()" class="success" id="btn-reprint" style="display:none;">Reprint</button>
+          </div>
         </div>
       </div>
 
       <!-- Movement -->
-      <div class="card">
-        <h2>Movement</h2>
-        <div class="row">
-          <label>Step</label>
-          <select id="move-step">
-            <option value="0.1">0.1mm</option>
-            <option value="1" selected>1mm</option>
-            <option value="10">10mm</option>
-            <option value="50">50mm</option>
-          </select>
+      <div class="card" id="card-movement">
+        <div class="card-header" onclick="toggleCard('card-movement')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Movement</span>
+          <span class="card-arrow" id="arr-card-movement">&#9650;</span>
         </div>
-        <div style="margin-bottom:6px;">
-          <div style="font-size:12px;color:#aaa;margin-bottom:4px;">X / Y</div>
-          <div class="move-grid">
-            <div></div>
-            <button onclick="move('Y', 1)">Y+</button>
-            <div></div>
-            <button onclick="move('X', -1)">X-</button>
-            <button onclick="sendGcode('G28 X Y')">Home</button>
-            <button onclick="move('X', 1)">X+</button>
-            <div></div>
-            <button onclick="move('Y', -1)">Y-</button>
-            <div></div>
+        <div id="body-card-movement">
+          <div class="row">
+            <label>Step</label>
+            <select id="move-step">
+              <option value="0.1">0.1mm</option>
+              <option value="1" selected>1mm</option>
+              <option value="10">10mm</option>
+              <option value="50">50mm</option>
+            </select>
           </div>
-        </div>
-        <div style="margin-bottom:6px;">
-          <div style="font-size:12px;color:#aaa;margin-bottom:4px;">Z</div>
-          <div class="btn-row">
-            <button onclick="move('Z', 1)">Z+</button>
-            <button onclick="sendGcode('G28 Z')">Home Z</button>
-            <button onclick="move('Z', -1)">Z-</button>
+          <div style="margin-bottom:6px;">
+            <div style="font-size:12px;color:#aaa;margin-bottom:4px;">X / Y</div>
+            <div class="move-grid">
+              <div></div>
+              <button onclick="move('Y', 1)">Y+</button>
+              <div></div>
+              <button onclick="move('X', -1)">X-</button>
+              <button onclick="sendGcode('G28 X Y')">Home</button>
+              <button onclick="move('X', 1)">X+</button>
+              <div></div>
+              <button onclick="move('Y', -1)">Y-</button>
+              <div></div>
+            </div>
           </div>
+          <div style="margin-bottom:6px;">
+            <div style="font-size:12px;color:#aaa;margin-bottom:4px;">Z</div>
+            <div class="btn-row">
+              <button onclick="move('Z', 1)">Z+</button>
+              <button onclick="sendGcode('G28 Z')">Home Z</button>
+              <button onclick="move('Z', -1)">Z-</button>
+            </div>
+          </div>
+          <button onclick="sendGcode('G28')" style="width:100%" class="success">Home All</button>
         </div>
-        <button onclick="sendGcode('G28')" style="width:100%" class="success">Home All</button>
+      </div>
+
+      <!-- Macros -->
+      <div class="card" id="card-macros">
+        <div class="card-header" onclick="toggleCard('card-macros')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Macros</span>
+          <button onclick="fetchMacros();event.stopPropagation();" style="padding:3px 8px;font-size:11px;-webkit-flex:none;flex:none;margin-left:8px;">Refresh</button>
+          <span class="card-arrow" id="arr-card-macros">&#9650;</span>
+        </div>
+        <div id="body-card-macros">
+          <div id="macro-list"><p style="color:#888;font-size:13px;">Connecting...</p></div>
+        </div>
       </div>
 
     </div>
@@ -367,6 +470,16 @@
 <!-- ===== CALIBRATE PAGE ===== -->
 <div class="page" id="page-calibrate">
   <div style="padding:8px;padding-bottom:54px;">
+
+    <div class="card" style="margin-bottom:8px;">
+      <h2>Gantry</h2>
+      <p style="font-size:12px;color:#aaa;margin-bottom:8px;">Voron 2.4: levels the gantry using all 4 Z motors. Run before Z offset calibration. Printer must be homed first.</p>
+      <div class="btn-row">
+        <button onclick="runMacro('QUAD_GANTRY_LEVEL')" class="success">QUAD_GANTRY_LEVEL</button>
+        <button onclick="runMacro('QGL')" class="success">QGL</button>
+      </div>
+    </div>
+
     <p style="font-size:12px;color:#888;margin-bottom:8px;padding:0 4px;">If your printer has a custom macro like PROBE_CALIBRATE_VORON_TAP, send it from the Custom GCode field on the Main page instead.</p>
 
     <div class="card" style="margin-bottom:8px;">
@@ -505,6 +618,12 @@ var PAGES = ['main', 'console', 'calibrate', 'jobs', 'filament'];
 var WS_OBJECTS = {
   extruder: ['temperature', 'target'],
   heater_bed: ['temperature', 'target'],
+  mcu: ['temperature'],
+  temperature_host: ['temperature'],
+  fan: ['speed'],
+  gcode_move: ['speed_factor'],
+  'heater_fan hotend_fan': ['speed'],
+  'fan_generic exhaust_fan': ['speed'],
   print_stats: ['state', 'filename', 'print_duration', 'filament_used'],
   display_status: ['progress', 'message']
 };
@@ -530,19 +649,167 @@ function showPage(name) {
   if (name === 'jobs') fetchJobs();
 }
 
-// ===== SETTINGS =====
+// ===== CARD COLLAPSE + DRAG =====
 
-function toggleConnection() {
-  var content = document.getElementById('connection-content');
-  var arrow = document.getElementById('connection-arrow');
-  if (content.style.display === 'none') {
-    content.style.display = 'block';
-    arrow.innerHTML = '&#9650;';
-  } else {
-    content.style.display = 'none';
-    arrow.innerHTML = '&#9660;';
+var CARD_IDS = ['card-connection','card-temperature','card-fan','card-minilog','card-gcode','card-macros','card-status','card-movement'];
+
+function toggleCard(id) {
+  var body = document.getElementById('body-' + id);
+  var arrow = document.getElementById('arr-' + id);
+  var hdr = document.querySelector('#' + id + ' .card-header');
+  if (!body) return;
+  var collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? '' : 'none';
+  if (arrow) arrow.innerHTML = collapsed ? '&#9650;' : '&#9660;';
+  if (hdr) hdr.style.marginBottom = collapsed ? '' : '0';
+  try { localStorage.setItem('cc_' + id, collapsed ? '0' : '1'); } catch(e) {}
+}
+
+function initCards() {
+  for (var i = 0; i < CARD_IDS.length; i++) {
+    var id = CARD_IDS[i];
+    if (localStorage.getItem('cc_' + id) === '1') {
+      var body = document.getElementById('body-' + id);
+      var arrow = document.getElementById('arr-' + id);
+      var hdr = document.querySelector('#' + id + ' .card-header');
+      if (body) body.style.display = 'none';
+      if (arrow) arrow.innerHTML = '&#9660;';
+      if (hdr) hdr.style.marginBottom = '0';
+    }
+  }
+  restoreCardOrder();
+  initDragDrop();
+}
+
+// drag and drop
+var dragState = null;
+
+function initDragDrop() {
+  var cols = ['col-left', 'col-right'];
+  for (var c = 0; c < cols.length; c++) {
+    var col = document.getElementById(cols[c]);
+    if (!col) continue;
+    var cards = col.children;
+    for (var i = 0; i < cards.length; i++) {
+      var handle = cards[i].querySelector('.drag-handle');
+      if (handle) setupDragHandle(handle, cards[i]);
+    }
   }
 }
+
+function setupDragHandle(handle, card) {
+  handle.addEventListener('touchstart', function(e) {
+    var touch = e.touches[0];
+    dragState = {
+      card: card, col: card.parentNode,
+      startX: touch.clientX, startY: touch.clientY,
+      active: false, ghost: null, ph: null,
+      timer: setTimeout(function() { activateDrag(touch); }, 180)
+    };
+  });
+  handle.addEventListener('touchmove', function(e) {
+    if (!dragState) return;
+    var touch = e.touches[0];
+    var dy = Math.abs(touch.clientY - dragState.startY);
+    var dx = Math.abs(touch.clientX - dragState.startX);
+    if (!dragState.active) {
+      if (dy > 6 || dx > 6) {
+        clearTimeout(dragState.timer);
+        if (dy >= dx) activateDrag(touch); else { dragState = null; return; }
+      } else return;
+    }
+    e.preventDefault();
+    moveDrag(touch);
+  });
+  handle.addEventListener('touchend', function(e) {
+    if (!dragState) return;
+    clearTimeout(dragState.timer);
+    if (dragState.active) finishDrag(); else dragState = null;
+  });
+}
+
+function activateDrag(touch) {
+  if (!dragState || dragState.active) return;
+  dragState.active = true;
+  var card = dragState.card;
+  var rect = card.getBoundingClientRect();
+  dragState.rect = rect;
+  var ph = document.createElement('div');
+  ph.className = 'drag-placeholder';
+  ph.style.height = rect.height + 'px';
+  card.parentNode.insertBefore(ph, card);
+  dragState.ph = ph;
+  var ghost = card.cloneNode(true);
+  ghost.className = ghost.className + ' drag-ghost';
+  ghost.style.top = rect.top + 'px';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.width = rect.width + 'px';
+  document.body.appendChild(ghost);
+  dragState.ghost = ghost;
+  card.style.opacity = '0';
+}
+
+function moveDrag(touch) {
+  if (!dragState || !dragState.active) return;
+  var dy = touch.clientY - dragState.startY;
+  var dx = touch.clientX - dragState.startX;
+  dragState.ghost.style.top = (dragState.rect.top + dy) + 'px';
+  dragState.ghost.style.left = (dragState.rect.left + dx) + 'px';
+  var col = dragState.col;
+  var children = col.children;
+  var mid = touch.clientY;
+  var insertBefore = null;
+  for (var i = 0; i < children.length; i++) {
+    var c = children[i];
+    if (c === dragState.card || c === dragState.ph) continue;
+    var r = c.getBoundingClientRect();
+    if (mid < r.top + r.height / 2) { insertBefore = c; break; }
+  }
+  if (insertBefore) col.insertBefore(dragState.ph, insertBefore);
+  else col.appendChild(dragState.ph);
+}
+
+function finishDrag() {
+  var card = dragState.card;
+  card.parentNode.insertBefore(card, dragState.ph);
+  dragState.ph.parentNode.removeChild(dragState.ph);
+  dragState.ghost.parentNode.removeChild(dragState.ghost);
+  card.style.opacity = '';
+  saveCardOrder();
+  dragState = null;
+}
+
+function saveCardOrder() {
+  var cols = ['col-left', 'col-right'];
+  for (var c = 0; c < cols.length; c++) {
+    var col = document.getElementById(cols[c]);
+    if (!col) continue;
+    var order = [];
+    for (var i = 0; i < col.children.length; i++) {
+      if (col.children[i].id) order.push(col.children[i].id);
+    }
+    try { localStorage.setItem('co_' + cols[c], JSON.stringify(order)); } catch(e) {}
+  }
+}
+
+function restoreCardOrder() {
+  var cols = ['col-left', 'col-right'];
+  for (var c = 0; c < cols.length; c++) {
+    var col = document.getElementById(cols[c]);
+    if (!col) continue;
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem('co_' + cols[c])); } catch(e) {}
+    if (!saved) continue;
+    for (var i = 0; i < saved.length; i++) {
+      var card = document.getElementById(saved[i]);
+      if (card && card.parentNode === col) col.appendChild(card);
+    }
+  }
+}
+
+// ===== SETTINGS =====
+
+function toggleConnection() { toggleCard('card-connection'); }
 
 function saveSettings() {
   var ip = document.getElementById('moonraker-ip').value.trim();
@@ -635,8 +902,11 @@ function handleWSMessage(data) {
     if (data.result.status) {
       mergeDeep(printerStatus, data.result.status);
       updateTempsUI();
+      updateFansUI();
       updatePrintStatusUI();
     }
+    fetchMacros();
+    fetchMiniConsole();
     return;
   }
   if (!data.method) return;
@@ -645,6 +915,7 @@ function handleWSMessage(data) {
     if (changed) {
       mergeDeep(printerStatus, changed);
       updateTempsUI();
+      updateFansUI();
       updatePrintStatusUI();
     }
   } else if (data.method === 'notify_klippy_ready') {
@@ -680,7 +951,7 @@ function updateTempsUI() {
       filHotendTemp = ext.temperature;
     }
     if (ext.target !== undefined) {
-      document.getElementById('hotend-target').textContent = 'target: ' + ext.target.toFixed(0) + '°';
+      document.getElementById('hotend-target').textContent = ext.target > 0 ? ('→ ' + ext.target.toFixed(0) + '°') : '--';
       filHotendTarget = ext.target;
     }
     updateFilamentTempDisplay();
@@ -689,8 +960,14 @@ function updateTempsUI() {
     if (bed.temperature !== undefined)
       document.getElementById('bed-temp').textContent = bed.temperature.toFixed(1) + '°';
     if (bed.target !== undefined)
-      document.getElementById('bed-target').textContent = 'target: ' + bed.target.toFixed(0) + '°';
+      document.getElementById('bed-target').textContent = bed.target > 0 ? ('→ ' + bed.target.toFixed(0) + '°') : '--';
   }
+  var mcu = printerStatus.mcu;
+  if (mcu && mcu.temperature !== undefined)
+    document.getElementById('mcu-temp').textContent = mcu.temperature.toFixed(1) + '°';
+  var host = printerStatus.temperature_host;
+  if (host && host.temperature !== undefined)
+    document.getElementById('soc-temp').textContent = host.temperature.toFixed(1) + '°';
 }
 
 function updatePrintStatusUI() {
@@ -729,6 +1006,21 @@ function updatePrintStatusUI() {
       msgEl.style.display = 'none';
     }
   }
+}
+
+function updateFansUI() {
+  var fan = printerStatus.fan;
+  if (fan && fan.speed !== undefined)
+    document.getElementById('fan-actual').textContent = Math.round(fan.speed * 100) + '%';
+  var gm = printerStatus.gcode_move;
+  if (gm && gm.speed_factor !== undefined)
+    document.getElementById('speed-actual').textContent = Math.round(gm.speed_factor * 100) + '%';
+  var exh = printerStatus['fan_generic exhaust_fan'];
+  if (exh && exh.speed !== undefined)
+    document.getElementById('exhaust-actual').textContent = Math.round(exh.speed * 100) + '%';
+  var htdf = printerStatus['heater_fan hotend_fan'];
+  if (htdf && htdf.speed !== undefined)
+    document.getElementById('hotend-fan-actual').textContent = Math.round(htdf.speed * 100) + '%';
 }
 
 // ===== XHR API (one-shot requests) =====
@@ -874,6 +1166,40 @@ function sendCustomGcode() {
 
 // ===== CONSOLE =====
 
+var lastMiniConsoleTime = 0;
+
+function fetchMiniConsole() {
+  if (!BASE_URL) return;
+  apiGet('/server/gcode_store?count=30', function(data) {
+    var r = data.result && data.result.gcode_store;
+    if (!r) return;
+    var log = document.getElementById('mini-console-log');
+    if (!log) return;
+    var newEntries = [];
+    for (var i = 0; i < r.length; i++) {
+      if (r[i].time > lastMiniConsoleTime) newEntries.push(r[i]);
+    }
+    if (!newEntries.length) return;
+    lastMiniConsoleTime = newEntries[newEntries.length - 1].time;
+    for (var j = 0; j < newEntries.length; j++) {
+      var entry = newEntries[j];
+      var div = document.createElement('div');
+      var msg = entry.message || '';
+      if (entry.type === 'command') { div.className = 'log-cmd'; div.textContent = '> ' + msg; }
+      else if (msg.indexOf('!!') === 0 || entry.type === 'error') { div.className = 'log-err'; div.textContent = msg; }
+      else { div.className = 'log-resp'; div.textContent = msg; }
+      log.appendChild(div);
+    }
+    log.scrollTop = log.scrollHeight;
+  });
+}
+
+function clearMiniConsole() {
+  var log = document.getElementById('mini-console-log');
+  if (log) log.innerHTML = '';
+  lastMiniConsoleTime = 0;
+}
+
 function fetchConsole() {
   apiGet('/server/gcode_store?count=100', function(data) {
     var r = data.result && data.result.gcode_store;
@@ -931,6 +1257,43 @@ function clearConsole() {
 })();
 
 // ===== CALIBRATE =====
+
+function runMacro(cmd) {
+  sendGcode(cmd);
+  showToast(cmd + ' sent');
+}
+
+function fetchMacros() {
+  var el = document.getElementById('macro-list');
+  el.innerHTML = '<p style="color:#888;font-size:13px;">Loading...</p>';
+  apiGet('/printer/objects/list', function(data) {
+    var objects = data.result && data.result.objects;
+    if (!objects) {
+      el.innerHTML = '<p style="color:#c0392b;font-size:13px;">Failed to load.</p>';
+      return;
+    }
+    var macros = [];
+    for (var i = 0; i < objects.length; i++) {
+      if (objects[i].indexOf('gcode_macro ') === 0) {
+        var name = objects[i].slice(12);
+        if (name.charAt(0) !== '_') macros.push(name);
+      }
+    }
+    if (macros.length === 0) {
+      el.innerHTML = '<p style="color:#888;font-size:13px;">No macros found.</p>';
+      return;
+    }
+    macros.sort();
+    var html = '<div class="macro-grid">';
+    for (var j = 0; j < macros.length; j++) {
+      var safe = escHtml(macros[j]);
+      var esc = macros[j].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      html += '<button onclick="runMacro(\'' + esc + '\')" style="font-size:12px;padding:6px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + safe + '">' + safe + '</button>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  });
+}
 
 function startCalibrate(cmd) {
   sendGcode(cmd);
@@ -1065,6 +1428,8 @@ function showToast(msg) {
 // ===== INIT =====
 
 loadSettings();
+initCards();
+setInterval(fetchMiniConsole, 5000);
 if (WS_URL) connectWS();
 </script>
 </body>
