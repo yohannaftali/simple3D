@@ -9,9 +9,12 @@ Built specifically for **old iOS devices (iOS 10, Safari)** that can no longer r
 - Temperature monitor & control (hotend + bed)
 - Print status with progress bar (pause / resume / cancel)
 - Axis movement controls (X/Y/Z) with adjustable step size
+- Quad Gantry Level shortcut (shown only on printers with `[quad_gantry_level]`)
+- Calibration Tools: CLEAN_NOZZLE, MANUAL_PROBE, PROBE_ACCURACY, PROBE_CALIBRATE and any `PID_EXTRUDER_*` / `PID_HEATER_BED_*` macros
 - Fan speed & print speed control
 - Custom GCode input
 - Collapsible connection settings (accordion)
+- Every Main-page card can be collapsed, dragged to reorder, and resized (grip in the bottom-right corner; double-tap it to reset)
 - **Portrait:** scrollable single column
 - **Landscape:** fixed 2-column layout, fits one screen without scrolling
 - Connection settings saved in browser `localStorage`

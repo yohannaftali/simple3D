@@ -93,3 +93,49 @@ Detailed implementation notes per phase. AGENTS.md holds the current reference s
 - Note about homing before load/unload
 
 **Known gap:** No cold-retract guard on Unload buttons. To add: check `filHotendTemp >= 150` before allowing retract, or show a warning label.
+
+---
+
+## Main Page — Calibration Tools card + QGL shortcut
+
+- `#card-tools` (Calibration Tools) in `#col-right` between Movement and Macros; populated by `renderTools(objects, macros)`, called from `fetchMacros()`
+- CLEAN_NOZZLE shown only if the macro exists; MANUAL_PROBE always; PROBE_ACCURACY / PROBE_CALIBRATE only if a probe object exists
+- `PID_EXTRUDER_*` / `PID_HEATER_BED_*` macros listed dynamically (orange, `confirm()` before running)
+- MANUAL_PROBE / PROBE_CALIBRATE call `startCalibrate()` and switch to the Calibrate page for TESTZ / ACCEPT
+- `#btn-qgl` above Home All, visible only when `quad_gantry_level` is in the objects list
+- `restoreCardOrder()` now keeps cards missing from a saved order at their default position (instead of jumping to the top of the column)
+
+---
+
+## Main Page — Resizable cards
+
+- Bottom-left grip (`.resize-handle`, inline SVG) on every card in `CARD_IDS`; touch + mouse
+- Drag changes the card body height (min 30px, body scrolls); double-tap / double-click resets
+- Stored per orientation in `localStorage` (`ch_portrait_<id>`, `ch_landscape_<id>`), re-applied on `orientationchange`/`resize`
+- CSS `resize` is not used — not supported for touch on iOS 10 Safari
+- Width is not resizable (cards fill their column)
+
+---
+
+## Fix — Macros not loading on page open
+
+- Klipper returns `null` (not missing) for fields an object doesn't have — e.g. `mcu.temperature`, `temperature_host.temperature` on this printer
+- `updateTempsUI()` called `.toFixed()` on `null`, throwing inside the subscribe-response handler before `fetchMacros()` ran; the Refresh button worked because it calls `fetchMacros()` directly
+- Temp/fan checks now use `typeof x === 'number'`; `fetchMacros()` / `fetchMiniConsole()` run before the UI updates in `handleWSMessage()`
+
+---
+
+## Fix — Landscape main page clipped / unused bottom space
+
+- `#page-main` in landscape inherited `.page { padding-bottom: 54px }` on top of `height: calc(100vh - 44px)` → ~54px dead space above the nav bar; now `padding-bottom: 0`
+- `#page-main .container` was `overflow: hidden`, so cards resized taller than the screen were cut off; now `overflow-y: auto` (scrolls only when content overflows)
+- `fitMainPage()` sets `#page-main` height to `window.innerHeight - 44` in landscape (iOS Safari `100vh` includes the toolbar area); re-run on `resize` / `orientationchange`
+
+---
+
+## Fix — Double scrollbar on Console / Jobs
+
+- Both pages had `.page { padding-bottom: 54px }` plus an inner wrapper with another `padding-bottom: 54px`, and fixed guesses `calc(100vh - 150px)` / `calc(100vh - 160px)` for the log/list → body scrolled as well as the list
+- `#page-console` / `#page-jobs` now have exact height (`window.innerHeight - 44` via `fitMainPage()`), `padding-bottom: 0`, `overflow: hidden`
+- `.fill-wrap` → `.fill-card` flex column; `#console-log` / `#jobs-list` take `flex: 1` of the remaining space and are the only scroll area
+- Target these pages by id, not by an extra class: `showPage()` overwrites `className` with `'page active'`

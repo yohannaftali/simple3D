@@ -140,6 +140,24 @@
   .console-input-row > * + * { margin-left: 8px; }
   .console-input-row input { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
 
+  /* Full-height pages (Console, Jobs): list fills the space above the nav bar */
+  #page-console, #page-jobs { padding-bottom: 0; height: calc(100vh - 44px); overflow: hidden; }
+  .fill-wrap {
+    height: 100%; padding: 8px;
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
+  }
+  .fill-card {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-height: 0; margin-bottom: 0;
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
+  }
+  .fill-card > * { -webkit-flex-shrink: 0; flex-shrink: 0; }
+  .fill-card > #console-log, .fill-card > #jobs-list {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-height: 0; height: auto; max-height: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
   /* Calibrate */
   .cal-adj-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-gap: 6px; margin: 8px 0; }
   #cal-adj-panel { display: none; }
@@ -187,6 +205,20 @@
   .drag-handle { font-size: 18px; color: #333; padding-right: 8px; -webkit-flex: none; flex: none; -webkit-user-select: none; user-select: none; }
   .drag-ghost { position: fixed; z-index: 500; opacity: 0.88; pointer-events: none; box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
   .drag-placeholder { border: 2px dashed #2a5298; border-radius: 8px; background: rgba(42,82,152,0.08); margin-bottom: 12px; }
+  /* Card resize (bottom-right grip) */
+  .resizable { position: relative; }
+  .card.resizable { padding-bottom: 18px; }
+  .card.drag-ghost { position: fixed; }
+  .resize-handle {
+    position: absolute; right: 0; bottom: 0; width: 22px; height: 22px;
+    cursor: nwse-resize; -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none; z-index: 5;
+  }
+  .resize-handle svg { position: absolute; right: 3px; bottom: 3px; }
+  .card.collapsed .resize-handle { display: none; }
+  .card.collapsed.resizable { padding-bottom: 12px; }
+  .card-sized #mini-console-log { height: 100%; }
+  .card-sized #macro-list { max-height: none; }
   /* Mini console on main page */
   #mini-console-log {
     background: #0a0a1a; border-radius: 6px; padding: 6px 8px;
@@ -199,13 +231,13 @@
 
   /* ===== LANDSCAPE ===== */
   @media (orientation: landscape) {
-    #page-main { overflow: hidden; height: calc(100vh - 44px); }
+    #page-main { overflow: hidden; height: calc(100vh - 44px); padding-bottom: 0; }
     #page-main .container {
       display: -webkit-box; display: -webkit-flex; display: flex;
       -webkit-flex-wrap: wrap; flex-wrap: wrap;
       -webkit-align-content: flex-start; align-content: flex-start;
       max-width: 100%; width: 100%; height: 100%;
-      padding: 4px; overflow: hidden;
+      padding: 4px; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch;
     }
     #card-connection { width: 100%; margin-bottom: 4px; }
     .col-left { width: 45%; padding-right: 4px; }
@@ -228,6 +260,8 @@
     #macro-list { max-height: 72px; }
     .card-title { font-size: 13px; }
     #mini-console-log { height: 64px; }
+    .card.resizable { padding-bottom: 14px; }
+    .card.collapsed.resizable { padding-bottom: 8px; }
   }
 </style>
 </head>
@@ -428,7 +462,20 @@
               <button onclick="move('Z', -1)">Z-</button>
             </div>
           </div>
+          <button onclick="runMacro('QUAD_GANTRY_LEVEL')" style="width:100%;margin-bottom:6px;display:none;" class="warning" id="btn-qgl">Quad Gantry Level</button>
           <button onclick="sendGcode('G28')" style="width:100%" class="success">Home All</button>
+        </div>
+      </div>
+
+      <!-- Calibration Tools -->
+      <div class="card" id="card-tools">
+        <div class="card-header" onclick="toggleCard('card-tools')">
+          <span class="drag-handle">&#8801;</span>
+          <span class="card-title">Calibration Tools</span>
+          <span class="card-arrow" id="arr-card-tools">&#9650;</span>
+        </div>
+        <div id="body-card-tools">
+          <div id="tools-list"><p style="color:#888;font-size:13px;">Connecting...</p></div>
         </div>
       </div>
 
@@ -452,8 +499,8 @@
 
 <!-- ===== CONSOLE PAGE ===== -->
 <div class="page" id="page-console">
-  <div style="padding:8px;padding-bottom:54px;">
-    <div class="card" style="margin-bottom:8px;">
+  <div class="fill-wrap">
+    <div class="card fill-card">
       <div style="display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:6px;">
         <h2 style="margin-bottom:0;-webkit-box-flex:1;-webkit-flex:1;flex:1;">Console</h2>
         <button onclick="clearConsole()" style="padding:4px 10px;font-size:12px;-webkit-flex:none;flex:none;">Clear</button>
@@ -518,8 +565,8 @@
 
 <!-- ===== JOBS PAGE ===== -->
 <div class="page" id="page-jobs">
-  <div style="padding:8px;padding-bottom:54px;">
-    <div class="card">
+  <div class="fill-wrap">
+    <div class="card fill-card">
       <div style="display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:8px;">
         <h2 style="margin-bottom:0;-webkit-box-flex:1;-webkit-flex:1;flex:1;">Print Jobs</h2>
         <button onclick="fetchJobs()" style="padding:4px 10px;font-size:12px;-webkit-flex:none;flex:none;">Refresh</button>
@@ -651,7 +698,7 @@ function showPage(name) {
 
 // ===== CARD COLLAPSE + DRAG =====
 
-var CARD_IDS = ['card-connection','card-temperature','card-fan','card-minilog','card-gcode','card-macros','card-status','card-movement'];
+var CARD_IDS = ['card-connection','card-temperature','card-fan','card-minilog','card-gcode','card-macros','card-status','card-movement','card-tools'];
 
 function toggleCard(id) {
   var body = document.getElementById('body-' + id);
@@ -662,7 +709,15 @@ function toggleCard(id) {
   body.style.display = collapsed ? '' : 'none';
   if (arrow) arrow.innerHTML = collapsed ? '&#9650;' : '&#9660;';
   if (hdr) hdr.style.marginBottom = collapsed ? '' : '0';
+  setCardCollapsedClass(id, !collapsed);
   try { localStorage.setItem('cc_' + id, collapsed ? '0' : '1'); } catch(e) {}
+}
+
+function setCardCollapsedClass(id, collapsed) {
+  var card = document.getElementById(id);
+  if (!card) return;
+  var cls = (' ' + card.className + ' ').replace(' collapsed ', ' ');
+  card.className = (collapsed ? cls + 'collapsed' : cls).replace(/^\s+|\s+$/g, '');
 }
 
 function initCards() {
@@ -675,10 +730,135 @@ function initCards() {
       if (body) body.style.display = 'none';
       if (arrow) arrow.innerHTML = '&#9660;';
       if (hdr) hdr.style.marginBottom = '0';
+      setCardCollapsedClass(id, true);
     }
   }
   restoreCardOrder();
   initDragDrop();
+  initResize();
+}
+
+// ===== CARD RESIZE =====
+// Custom grip in the bottom-right corner of each card (CSS `resize` does not
+// work on iOS touch). Drag to change body height; double-tap to reset.
+// Heights are stored per orientation: ch_<portrait|landscape>_<card id>.
+
+var RESIZE_ICON = '<svg width="14" height="14" viewBox="0 0 14 14">' +
+  '<line x1="13" y1="1" x2="1" y2="13" stroke="#556" stroke-width="1.5"/>' +
+  '<line x1="13" y1="6" x2="6" y2="13" stroke="#556" stroke-width="1.5"/>' +
+  '<line x1="13" y1="10" x2="10" y2="13" stroke="#556" stroke-width="1.5"/></svg>';
+var resizeState = null;
+
+function orientKey() {
+  return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+}
+
+function initResize() {
+  for (var i = 0; i < CARD_IDS.length; i++) {
+    var card = document.getElementById(CARD_IDS[i]);
+    var body = document.getElementById('body-' + CARD_IDS[i]);
+    if (!card || !body) continue;
+    card.className += ' resizable';
+    var h = document.createElement('div');
+    h.className = 'resize-handle';
+    h.innerHTML = RESIZE_ICON;
+    card.appendChild(h);
+    setupResizeHandle(h, CARD_IDS[i]);
+  }
+  applyCardHeights();
+  fitMainPage();
+  window.addEventListener('orientationchange', function() { setTimeout(function() { applyCardHeights(); fitMainPage(); }, 300); });
+  window.addEventListener('resize', function() { applyCardHeights(); fitMainPage(); });
+  document.addEventListener('mousemove', function(e) {
+    if (resizeState) { resizeMove(e.clientY); e.preventDefault(); }
+  });
+  document.addEventListener('mouseup', function() { if (resizeState) resizeEnd(); });
+}
+
+// Size fixed-height pages to the visible viewport minus the nav bar.
+// iOS Safari's 100vh includes the area behind its toolbars, clipping the bottom.
+// #page-main is fixed-height in landscape only; Console/Jobs always.
+function fitMainPage() {
+  var h = (window.innerHeight - 44) + 'px';
+  document.getElementById('page-main').style.height = orientKey() === 'landscape' ? h : '';
+  document.getElementById('page-console').style.height = h;
+  document.getElementById('page-jobs').style.height = h;
+}
+
+function setCardHeight(id, px) {
+  var card = document.getElementById(id);
+  var body = document.getElementById('body-' + id);
+  if (!card || !body) return;
+  var cls = (' ' + card.className + ' ').replace(' card-sized ', ' ').replace(/^\s+|\s+$/g, '');
+  if (px) {
+    body.style.height = px + 'px';
+    body.style.overflowY = 'auto';
+    body.style.webkitOverflowScrolling = 'touch';
+    card.className = cls + ' card-sized';
+  } else {
+    body.style.height = '';
+    body.style.overflowY = '';
+    card.className = cls;
+  }
+}
+
+function applyCardHeights() {
+  var o = orientKey();
+  for (var i = 0; i < CARD_IDS.length; i++) {
+    var v = null;
+    try { v = localStorage.getItem('ch_' + o + '_' + CARD_IDS[i]); } catch(e) {}
+    setCardHeight(CARD_IDS[i], v ? parseInt(v, 10) : 0);
+  }
+}
+
+function setupResizeHandle(handle, id) {
+  var lastTap = 0;
+  handle.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var now = new Date().getTime();
+    if (now - lastTap < 350) { resetCardHeight(id); lastTap = 0; return; }
+    lastTap = now;
+    resizeStart(id, e.touches[0].clientY);
+  });
+  handle.addEventListener('touchmove', function(e) {
+    if (!resizeState) return;
+    e.preventDefault();
+    resizeMove(e.touches[0].clientY);
+  });
+  handle.addEventListener('touchend', function() { if (resizeState) resizeEnd(); });
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    resizeStart(id, e.clientY);
+  });
+  handle.addEventListener('dblclick', function() { resetCardHeight(id); });
+}
+
+function resizeStart(id, y) {
+  var body = document.getElementById('body-' + id);
+  resizeState = { id: id, startY: y, startH: body.offsetHeight, moved: false };
+}
+
+function resizeMove(y) {
+  var dy = y - resizeState.startY;
+  if (Math.abs(dy) > 2) resizeState.moved = true;
+  if (!resizeState.moved) return;
+  setCardHeight(resizeState.id, Math.max(30, Math.round(resizeState.startH + dy)));
+}
+
+function resizeEnd() {
+  var st = resizeState;
+  resizeState = null;
+  if (!st.moved) return;
+  var body = document.getElementById('body-' + st.id);
+  try { localStorage.setItem('ch_' + orientKey() + '_' + st.id, String(body.offsetHeight)); } catch(e) {}
+}
+
+function resetCardHeight(id) {
+  resizeState = null;
+  setCardHeight(id, 0);
+  try { localStorage.removeItem('ch_' + orientKey() + '_' + id); } catch(e) {}
+  showToast('Size reset');
 }
 
 // drag and drop
@@ -800,9 +980,25 @@ function restoreCardOrder() {
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem('co_' + cols[c])); } catch(e) {}
     if (!saved) continue;
+    // Remember each card's original predecessor so cards added after the
+    // order was saved keep their default position instead of jumping to top
+    var prevOf = {};
+    var ids = [];
+    for (var k = 0; k < col.children.length; k++) {
+      var cid = col.children[k].id;
+      if (!cid) continue;
+      prevOf[cid] = ids.length ? ids[ids.length - 1] : null;
+      ids.push(cid);
+    }
     for (var i = 0; i < saved.length; i++) {
       var card = document.getElementById(saved[i]);
       if (card && card.parentNode === col) col.appendChild(card);
+    }
+    for (var n = 0; n < ids.length; n++) {
+      if (saved.indexOf(ids[n]) !== -1) continue;
+      var extra = document.getElementById(ids[n]);
+      var prev = prevOf[ids[n]] && document.getElementById(prevOf[ids[n]]);
+      if (prev) col.insertBefore(extra, prev.nextSibling);
     }
   }
 }
@@ -899,14 +1095,15 @@ function handleWSMessage(data) {
   // Response to subscribe request
   if (data.id === 1 && data.result) {
     setStatus('Connected', 'green');
+    // Fetch lists first so a UI update error can't block them
+    fetchMacros();
+    fetchMiniConsole();
     if (data.result.status) {
       mergeDeep(printerStatus, data.result.status);
       updateTempsUI();
       updateFansUI();
       updatePrintStatusUI();
     }
-    fetchMacros();
-    fetchMiniConsole();
     return;
   }
   if (!data.method) return;
@@ -946,27 +1143,27 @@ function updateTempsUI() {
   var ext = printerStatus.extruder;
   var bed = printerStatus.heater_bed;
   if (ext) {
-    if (ext.temperature !== undefined) {
+    if (typeof ext.temperature === 'number') {
       document.getElementById('hotend-temp').textContent = ext.temperature.toFixed(1) + '°';
       filHotendTemp = ext.temperature;
     }
-    if (ext.target !== undefined) {
+    if (typeof ext.target === 'number') {
       document.getElementById('hotend-target').textContent = ext.target > 0 ? ('→ ' + ext.target.toFixed(0) + '°') : '--';
       filHotendTarget = ext.target;
     }
     updateFilamentTempDisplay();
   }
   if (bed) {
-    if (bed.temperature !== undefined)
+    if (typeof bed.temperature === 'number')
       document.getElementById('bed-temp').textContent = bed.temperature.toFixed(1) + '°';
-    if (bed.target !== undefined)
+    if (typeof bed.target === 'number')
       document.getElementById('bed-target').textContent = bed.target > 0 ? ('→ ' + bed.target.toFixed(0) + '°') : '--';
   }
   var mcu = printerStatus.mcu;
-  if (mcu && mcu.temperature !== undefined)
+  if (mcu && typeof mcu.temperature === 'number')
     document.getElementById('mcu-temp').textContent = mcu.temperature.toFixed(1) + '°';
   var host = printerStatus.temperature_host;
-  if (host && host.temperature !== undefined)
+  if (host && typeof host.temperature === 'number')
     document.getElementById('soc-temp').textContent = host.temperature.toFixed(1) + '°';
 }
 
@@ -1010,16 +1207,16 @@ function updatePrintStatusUI() {
 
 function updateFansUI() {
   var fan = printerStatus.fan;
-  if (fan && fan.speed !== undefined)
+  if (fan && typeof fan.speed === 'number')
     document.getElementById('fan-actual').textContent = Math.round(fan.speed * 100) + '%';
   var gm = printerStatus.gcode_move;
-  if (gm && gm.speed_factor !== undefined)
+  if (gm && typeof gm.speed_factor === 'number')
     document.getElementById('speed-actual').textContent = Math.round(gm.speed_factor * 100) + '%';
   var exh = printerStatus['fan_generic exhaust_fan'];
-  if (exh && exh.speed !== undefined)
+  if (exh && typeof exh.speed === 'number')
     document.getElementById('exhaust-actual').textContent = Math.round(exh.speed * 100) + '%';
   var htdf = printerStatus['heater_fan hotend_fan'];
-  if (htdf && htdf.speed !== undefined)
+  if (htdf && typeof htdf.speed === 'number')
     document.getElementById('hotend-fan-actual').textContent = Math.round(htdf.speed * 100) + '%';
 }
 
@@ -1270,6 +1467,7 @@ function fetchMacros() {
     var objects = data.result && data.result.objects;
     if (!objects) {
       el.innerHTML = '<p style="color:#c0392b;font-size:13px;">Failed to load.</p>';
+      document.getElementById('tools-list').innerHTML = el.innerHTML;
       return;
     }
     var macros = [];
@@ -1279,6 +1477,7 @@ function fetchMacros() {
         if (name.charAt(0) !== '_') macros.push(name);
       }
     }
+    renderTools(objects, macros);
     if (macros.length === 0) {
       el.innerHTML = '<p style="color:#888;font-size:13px;">No macros found.</p>';
       return;
@@ -1293,6 +1492,56 @@ function fetchMacros() {
     html += '</div>';
     el.innerHTML = html;
   });
+}
+
+// Calibration Tools card + QGL shortcut, driven by /printer/objects/list
+function renderTools(objects, macros) {
+  var hasQgl = false, hasProbe = false;
+  for (var i = 0; i < objects.length; i++) {
+    var o = objects[i];
+    if (o === 'quad_gantry_level') hasQgl = true;
+    if (o === 'probe' || o === 'bltouch' || o === 'smart_effector' || o.indexOf('probe_eddy_current') === 0) hasProbe = true;
+  }
+  document.getElementById('btn-qgl').style.display = hasQgl ? 'block' : 'none';
+
+  var upper = {};
+  var pid = [];
+  for (var j = 0; j < macros.length; j++) {
+    var m = macros[j].toUpperCase();
+    upper[m] = macros[j];
+    if (m.indexOf('PID_EXTRUDER_') === 0 || m.indexOf('PID_HEATER_BED_') === 0) pid.push(macros[j]);
+  }
+  pid.sort();
+
+  // [label, command, action] — 'cal' opens the Calibrate page for TESTZ/ACCEPT
+  var tools = [];
+  if (upper.CLEAN_NOZZLE) tools.push([upper.CLEAN_NOZZLE, upper.CLEAN_NOZZLE, 'run']);
+  tools.push(['MANUAL_PROBE', 'MANUAL_PROBE', 'cal']);
+  if (hasProbe) {
+    tools.push(['PROBE_ACCURACY', 'PROBE_ACCURACY', 'run']);
+    tools.push(['PROBE_CALIBRATE', 'PROBE_CALIBRATE', 'cal']);
+  }
+  for (var p = 0; p < pid.length; p++) tools.push([pid[p], pid[p], 'pid']);
+
+  var html = '<div class="macro-grid">';
+  for (var t = 0; t < tools.length; t++) {
+    var safe = escHtml(tools[t][0]);
+    var esc = tools[t][1].replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<button onclick="runTool(\'' + esc + '\',\'' + tools[t][2] + '\')" style="font-size:12px;padding:6px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"' +
+      (tools[t][2] === 'pid' ? ' class="warning"' : '') + ' title="' + safe + '">' + safe + '</button>';
+  }
+  html += '</div>';
+  document.getElementById('tools-list').innerHTML = html;
+}
+
+function runTool(cmd, action) {
+  if (action === 'cal') {
+    startCalibrate(cmd);
+    showPage('calibrate');
+    return;
+  }
+  if (action === 'pid' && !confirm('Run ' + cmd + '? The heater will cycle for several minutes.')) return;
+  runMacro(cmd);
 }
 
 function startCalibrate(cmd) {
