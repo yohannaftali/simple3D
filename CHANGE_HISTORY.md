@@ -139,3 +139,10 @@ Detailed implementation notes per phase. AGENTS.md holds the current reference s
 - `#page-console` / `#page-jobs` now have exact height (`window.innerHeight - 44` via `fitMainPage()`), `padding-bottom: 0`, `overflow: hidden`
 - `.fill-wrap` → `.fill-card` flex column; `#console-log` / `#jobs-list` take `flex: 1` of the remaining space and are the only scroll area
 - Target these pages by id, not by an extra class: `showPage()` overwrites `className` with `'page active'`
+
+---
+
+## Fix — MCU / SoC temperatures always "--"
+
+- `mcu` and `temperature_host` report `temperature: null` on this printer; the values live in `temperature_sensor MCU` and `temperature_sensor SoC`
+- `WS_OBJECTS` and `updateTempsUI()` now use those names (hardcoded, like `heater_fan hotend_fan` / `fan_generic exhaust_fan`)

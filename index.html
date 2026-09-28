@@ -665,8 +665,8 @@ var PAGES = ['main', 'console', 'calibrate', 'jobs', 'filament'];
 var WS_OBJECTS = {
   extruder: ['temperature', 'target'],
   heater_bed: ['temperature', 'target'],
-  mcu: ['temperature'],
-  temperature_host: ['temperature'],
+  'temperature_sensor MCU': ['temperature'],
+  'temperature_sensor SoC': ['temperature'],
   fan: ['speed'],
   gcode_move: ['speed_factor'],
   'heater_fan hotend_fan': ['speed'],
@@ -1159,10 +1159,10 @@ function updateTempsUI() {
     if (typeof bed.target === 'number')
       document.getElementById('bed-target').textContent = bed.target > 0 ? ('→ ' + bed.target.toFixed(0) + '°') : '--';
   }
-  var mcu = printerStatus.mcu;
+  var mcu = printerStatus['temperature_sensor MCU'];
   if (mcu && typeof mcu.temperature === 'number')
     document.getElementById('mcu-temp').textContent = mcu.temperature.toFixed(1) + '°';
-  var host = printerStatus.temperature_host;
+  var host = printerStatus['temperature_sensor SoC'];
   if (host && typeof host.temperature === 'number')
     document.getElementById('soc-temp').textContent = host.temperature.toFixed(1) + '°';
 }
