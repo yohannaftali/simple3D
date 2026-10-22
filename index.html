@@ -1522,6 +1522,11 @@ function renderTools(objects, macros) {
     tools.push(['PROBE_CALIBRATE', 'PROBE_CALIBRATE', 'cal']);
   }
   for (var p = 0; p < pid.length; p++) tools.push([pid[p], pid[p], 'pid']);
+  tools.push(['QUERY_ENDSTOPS', 'QUERY_ENDSTOPS', 'run']);
+  var steppers = ['stepper_x', 'stepper_y', 'stepper_z', 'stepper_z1', 'stepper_z2', 'stepper_z3'];
+  for (var s = 0; s < steppers.length; s++) {
+    tools.push(['BUZZ ' + steppers[s], 'STEPPER_BUZZ STEPPER=' + steppers[s], 'run']);
+  }
 
   var html = '<div class="macro-grid">';
   for (var t = 0; t < tools.length; t++) {
