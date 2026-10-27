@@ -71,6 +71,10 @@
     -webkit-tap-highlight-color: transparent;
   }
   button:active { background: #2a5298; }
+  button:disabled, input:disabled, select:disabled { opacity: 0.35; cursor: default; }
+  button:disabled:active { background: #0f3460; }
+  /* Taller tap targets (1.5x normal) in Main page cards and the Filament tab */
+  #page-main [id^="body-"] button, #page-filament button { min-height: 52px; }
   button.danger { border-color: #c0392b; }
   button.danger:active { background: #c0392b; }
   button.warning { border-color: #e67e22; }
@@ -202,7 +206,7 @@
   .macro-grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin-bottom: -6px; }
   .macro-grid > * { -webkit-box-flex: 0; -webkit-flex: none; flex: none; width: calc(50% - 3px); margin-bottom: 6px; }
   .macro-grid > *:nth-child(2n) { margin-left: 6px; }
-  #macro-list { max-height: 140px; overflow-y: auto; }
+  #macro-list { max-height: 210px; overflow-y: auto; }
 
   /* Card collapsible + drag */
   .card-header {
@@ -270,7 +274,8 @@
     .tl { font-size: 12px; min-width: 58px; }
     .tv-n { font-size: 14px; }
     .row-info { min-height: 28px; }
-    #macro-list { max-height: 72px; }
+    #macro-list { max-height: 108px; }
+    #page-main [id^="body-"] button, #page-filament button { min-height: 42px; }
     .card-title { font-size: 13px; }
     #mini-console-log { height: 64px; }
     .card.resizable { padding-bottom: 14px; }
@@ -544,7 +549,9 @@
     <div class="card" style="margin-bottom:8px;">
       <h2>Voron Tap / Probe</h2>
       <p style="font-size:12px;color:#aaa;margin-bottom:8px;">Use if your printer uses a probe (Voron Tap, BLTouch, CR Touch, etc.)</p>
-      <button onclick="startCalibrate('PROBE_CALIBRATE')" class="success" style="width:100%;">PROBE_CALIBRATE</button>
+      <button onclick="startCalibrate('PROBE_CALIBRATE')" class="success" style="width:100%;margin-bottom:8px;">PROBE_CALIBRATE</button>
+      <button onclick="runMacro('PROBE_ACCURACY')" style="width:100%;">PROBE_ACCURACY</button>
+      <p style="font-size:11px;color:#888;margin-top:6px;">PROBE_ACCURACY probes 10 times at the current position (home first). Results show in the Console.</p>
     </div>
 
     <div class="card" style="margin-bottom:8px;">
@@ -1066,6 +1073,7 @@ function connectWS() {
   };
   ws.onclose = function() {
     setStatus('Disconnected', 'red');
+    setPrintStateUnknown();
     scheduleReconnect();
   };
   ws.onerror = function() { /* onclose fires after onerror and handles reconnect */ };
@@ -1131,9 +1139,9 @@ function handleWSMessage(data) {
     setStatus('Connected', 'green');
     wsSubscribe();
   } else if (data.method === 'notify_klippy_disconnected') {
-    setStatus('Klipper offline', 'red');
+    setStatus('Klipper offline', 'red'); setPrintStateUnknown();
   } else if (data.method === 'notify_klippy_shutdown') {
-    setStatus('Klipper shutdown', 'red');
+    setStatus('Klipper shutdown', 'red'); setPrintStateUnknown();
   }
 }
 
@@ -1201,6 +1209,7 @@ function updatePrintStatusUI() {
     document.getElementById('print-times').textContent =
       elapsed > 0 ? ('Elapsed: ' + formatTime(elapsed) + '  Remaining: ' + formatTime(remaining)) : '';
     updatePrintButtons(state);
+    updatePrintLock(state);
   }
   if (ds) {
     var pct = Math.round((ds.progress || 0) * 100);
@@ -1312,7 +1321,13 @@ function updatePrintButtons(state) {
   resume.style.display = 'none';
   cancel.style.display = 'none';
   reprint.style.display = 'none';
-  if (state === 'printing') {
+  var unknown = !state || state === 'unknown';
+  pause.disabled = resume.disabled = cancel.disabled = unknown;
+  if (unknown) {
+    pause.style.display = '';
+    resume.style.display = '';
+    cancel.style.display = '';
+  } else if (state === 'printing') {
     pause.style.display = '';
     cancel.style.display = '';
   } else if (state === 'paused') {
@@ -1321,6 +1336,52 @@ function updatePrintButtons(state) {
   } else if (state === 'complete') {
     reprint.style.display = '';
   }
+}
+
+// While printing: collapse Movement, Macros and Custom GCode and disable their
+// controls. When the print ends, restore each card's saved collapse state.
+// 'unknown' (e.g. connection lost) leaves the lock as it is.
+var PRINT_LOCK_CARDS = ['card-movement', 'card-macros', 'card-gcode'];
+var printLocked = false;
+
+function updatePrintLock(state) {
+  if (!state || state === 'unknown') return;
+  var lock = state === 'printing';
+  if (lock === printLocked) return;
+  printLocked = lock;
+  for (var i = 0; i < PRINT_LOCK_CARDS.length; i++) {
+    var id = PRINT_LOCK_CARDS[i];
+    var saved = null;
+    try { saved = localStorage.getItem('cc_' + id); } catch(e) {}
+    setCardBodyCollapsed(id, lock || saved === '1');
+  }
+  applyPrintLockControls();
+}
+
+function applyPrintLockControls() {
+  for (var i = 0; i < PRINT_LOCK_CARDS.length; i++) {
+    var body = document.getElementById('body-' + PRINT_LOCK_CARDS[i]);
+    if (!body) continue;
+    var els = body.querySelectorAll('button, input, select');
+    for (var j = 0; j < els.length; j++) els[j].disabled = printLocked;
+  }
+}
+
+function setCardBodyCollapsed(id, collapsed) {
+  var body = document.getElementById('body-' + id);
+  var arrow = document.getElementById('arr-' + id);
+  var hdr = document.querySelector('#' + id + ' .card-header');
+  if (!body) return;
+  body.style.display = collapsed ? 'none' : '';
+  if (arrow) arrow.innerHTML = collapsed ? '&#9660;' : '&#9650;';
+  if (hdr) hdr.style.marginBottom = collapsed ? '0' : '';
+  setCardCollapsedClass(id, collapsed);
+}
+
+function setPrintStateUnknown() {
+  document.getElementById('print-state').textContent = 'Unknown';
+  document.getElementById('print-dot').className = 'status-dot dot-red';
+  updatePrintButtons('unknown');
 }
 
 function reprintLast() {
@@ -1550,6 +1611,7 @@ function fetchMacros() {
     }
     html += '</div>';
     el.innerHTML = html;
+    applyPrintLockControls();
   });
 }
 
@@ -1742,6 +1804,7 @@ function showToast(msg) {
 
 loadSettings();
 initCards();
+updatePrintButtons('unknown');
 setInterval(fetchMiniConsole, 5000);
 if (WS_URL) connectWS();
 </script>
