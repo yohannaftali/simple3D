@@ -220,3 +220,8 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - Settings > System > Display: a Full screen / Exit full screen button (Fullscreen API including the webkit/moz/ms prefixes; `p['catch']` so old engines parse it), and "Start in full screen" (`fs_auto`), which enters full screen on the first tap after load, because browsers block it without a gesture.
 - The hint adapts: already running as an app, iOS without the Fullscreen API (use Add to Home Screen), or install suggestion.
 - App mode: `manifest.webmanifest` (display fullscreen, landscape) + icons 180/192/512 + Apple/Android meta tags; the title is now "simple3D". server.py maps `.webmanifest` to `application/manifest+json`.
+
+### Phase 8.7: Paper test readout
+
+- Tools > Z Offset paper test shows the live nozzle Z (`manual_probe` subscribed: z_position, tested lower/upper) and the suggested new z_offset (current config z_offset, delta), using Klipper's formula `z_offset - Z + probe contact Z`. The contact Z comes from the "bed will contact at z=" console lines (`notify_gcode_response`), median/average per `samples_result`. Z_ENDSTOP_CALIBRATE shows the new position_endstop.
+- After ACCEPT the value Klipper printed is shown with a SAVE_CONFIG reminder. Starting a manual probe from the console opens the panel too.

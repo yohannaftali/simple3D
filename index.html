@@ -328,6 +328,11 @@
   .cal-grid { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; margin: 4px 0; }
   .cal-grid > * { -webkit-flex: none; flex: none; width: calc((100% - 12px) / 3); margin-bottom: 6px; }
   .cal-grid > *:nth-child(3n+2), .cal-grid > *:nth-child(3n) { margin-left: 6px; }
+  .cal-read { background: #0f0f23; border-radius: 8px; padding: 6px 10px; margin-bottom: 4px; }
+  .cal-read .lbl { color: #888; font-size: 12px; margin-right: 8px; }
+  .cal-z b { font-size: 26px; color: #a0c4ff; font-family: monospace; }
+  .cal-sug b { font-size: 20px; color: #27ae60; font-family: monospace; }
+  .cal-range { color: #888; font-size: 11px; font-family: monospace; margin-bottom: 2px; }
 
   /* ===== CONSOLE ===== */
   #console-log {
@@ -711,6 +716,12 @@
           <p class="hint">Home (and QGL) first. Then adjust until the nozzle just drags on paper.</p>
         </div>
         <div id="cal-adj-panel" style="display:none;">
+          <div class="cal-read">
+            <div class="cal-z"><span class="lbl">Nozzle Z</span><b id="cal-z">--</b></div>
+            <div class="cal-range" id="cal-range">&nbsp;</div>
+            <div class="cal-sug"><span class="lbl" id="cal-sug-lbl">New z_offset</span><b id="cal-sug">--</b></div>
+            <div class="cal-range" id="cal-cur">&nbsp;</div>
+          </div>
           <div class="cal-grid">
             <button onclick="testz(1)">+1</button>
             <button onclick="testz(0.1)">+0.1</button>
@@ -890,8 +901,15 @@ var WS_OBJECTS = {
   'heater_fan hotend_fan': ['speed'],
   'fan_generic exhaust_fan': ['speed'],
   print_stats: ['state', 'filename', 'print_duration', 'filament_used', 'info'],
-  display_status: ['progress', 'message']
+  display_status: ['progress', 'message'],
+  manual_probe: ['is_active', 'z_position', 'z_position_lower', 'z_position_upper']
 };
+
+// Paper test (PROBE_CALIBRATE / Z_ENDSTOP_CALIBRATE)
+var calMode = null;    // command that started the manual probe
+var calProbeZs = [];   // "bed will contact at z=" values from the console
+var calCfg = {};       // { section, z_offset, samples_result, position_endstop }
+var calResult = null;  // text Klipper printed after ACCEPT
 
 function $(id) { return document.getElementById(id); }
 
@@ -1177,6 +1195,8 @@ function handleWSMessage(data) {
     setStatus('Klipper shutdown', 'red'); setPrintStateUnknown();
   } else if (data.method === 'notify_update_response') {
     updProgress(data.params && data.params[0]);
+  } else if (data.method === 'notify_gcode_response') {
+    calGcodeResponse(data.params && data.params[0]);
   }
 }
 
@@ -1199,6 +1219,7 @@ function updateAllUI() {
   updateFansUI();
   updateToolheadUI();
   updatePrintStatusUI();
+  updateCalUI();
 }
 
 function setText(id, txt) { var el = $(id); if (el) el.textContent = txt; }
@@ -1859,16 +1880,122 @@ function runTool(cmd, action) {
 }
 
 function startCalibrate(cmd) {
+  calMode = cmd;
+  calProbeZs = [];
+  calResult = null;
+  calLoadConfig();
   sendGcode(cmd);
-  $('cal-start').style.display = 'none';
-  $('cal-adj-panel').style.display = 'block';
-  $('cal-save-row').style.display = 'none';
+  calShowAdjust();
   showToast(cmd + ' sent');
 }
 
+function calShowAdjust() {
+  $('cal-start').style.display = 'none';
+  $('cal-adj-panel').style.display = 'block';
+  $('cal-save-row').style.display = 'none';
+  updateCalUI();
+}
+
+var calClosedAt = 0;
 function calClose() {
+  calMode = null;
+  calClosedAt = new Date().getTime();
   $('cal-adj-panel').style.display = 'none';
   $('cal-start').style.display = 'block';
+}
+
+// Configured z_offset / position_endstop, for the suggested new value
+function calLoadConfig() {
+  apiGet('/printer/objects/query?configfile=settings', function(data) {
+    var s = data.result && data.result.status && data.result.status.configfile &&
+            data.result.status.configfile.settings;
+    if (!s) return;
+    calCfg = {};
+    var names = ['probe', 'bltouch', 'smart_effector', 'probe_eddy_current'];
+    for (var key in s) {
+      if (!s.hasOwnProperty(key)) continue;
+      for (var i = 0; i < names.length; i++) {
+        if ((key === names[i] || key.indexOf(names[i] + ' ') === 0) && typeof s[key].z_offset === 'number') {
+          calCfg.section = key;
+          calCfg.z_offset = s[key].z_offset;
+          calCfg.samples_result = s[key].samples_result || 'average';
+        }
+      }
+    }
+    if (s.stepper_z && typeof s.stepper_z.position_endstop === 'number') {
+      calCfg.position_endstop = s.stepper_z.position_endstop;
+    }
+    updateCalUI();
+  });
+}
+
+// Klipper console lines during the paper test:
+//   "probe: at X,Y bed will contact at z=1.234"  (one per sample)
+//   "probe: z_offset: 1.234"  /  "stepper_z: position_endstop: 1.234"  (after ACCEPT)
+function calGcodeResponse(line) {
+  if (typeof line !== 'string' || !calMode) return;
+  var m = line.match(/contact at z=(-?[0-9.]+)/) || line.match(/ is z=(-?[0-9.]+)/);
+  if (m) { calProbeZs.push(parseFloat(m[1])); updateCalUI(); return; }
+  if (line.indexOf('exceed tolerance') !== -1) { calProbeZs = []; return; }
+  m = line.match(/(z_offset|position_endstop): (-?[0-9.]+)/);
+  if (m && line.indexOf('SAVE_CONFIG') !== -1) {
+    calResult = m[1] + ' = ' + m[2];
+    updateCalUI();
+  }
+}
+
+// Probe result as Klipper combines the samples (median or average)
+function calProbeZ() {
+  var a = calProbeZs.slice(0);
+  if (!a.length) return null;
+  if (calCfg.samples_result === 'median') {
+    a.sort(function(x, y) { return x - y; });
+    var mid = Math.floor(a.length / 2);
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+  }
+  var sum = 0;
+  for (var i = 0; i < a.length; i++) sum += a[i];
+  return sum / a.length;
+}
+
+function fmtZ(v) { return typeof v === 'number' ? v.toFixed(3) : '--'; }
+
+function updateCalUI() {
+  var mp = printerStatus.manual_probe;
+  if (!$('cal-z')) return;
+  var active = !!(mp && mp.is_active);
+  // Started from the console or another UI: open the adjust panel too
+  if (active && $('cal-adj-panel').style.display === 'none' && new Date().getTime() - calClosedAt > 4000) {
+    if (!calMode) { calMode = '?'; calProbeZs = []; calResult = null; calLoadConfig(); }
+    calShowAdjust();
+  }
+  if (calMode === null) return;
+  var z = active ? mp.z_position : null;
+  setText('cal-z', active ? fmtZ(z) : (calResult ? 'done' : '--'));
+  if (active && (typeof mp.z_position_lower === 'number' || typeof mp.z_position_upper === 'number')) {
+    setText('cal-range', 'tested: ' + fmtZ(mp.z_position_lower) + ' ← now → ' + fmtZ(mp.z_position_upper));
+  } else {
+    setText('cal-range', ' ');
+  }
+  var endstop = calMode === 'Z_ENDSTOP_CALIBRATE';
+  setText('cal-sug-lbl', calResult ? 'Result' : (endstop ? 'New position_endstop' : 'New z_offset'));
+  var sug = null, cur = null;
+  if (endstop) {
+    cur = calCfg.position_endstop;
+    if (typeof cur === 'number' && typeof z === 'number') sug = cur - z;
+  } else {
+    cur = calCfg.z_offset;
+    var pz = calProbeZ();
+    // Same formula as Klipper's probe_calibrate_finalize
+    if (typeof cur === 'number' && typeof z === 'number' && pz !== null) sug = cur - z + pz;
+  }
+  if (calResult) setText('cal-sug', calResult);
+  else setText('cal-sug', sug === null ? '--' : (sug >= 0 ? '+' : '') + sug.toFixed(3));
+  var info = typeof cur === 'number' ? 'current: ' + fmtZ(cur) : ' ';
+  if (sug !== null && !calResult) info += '  (Δ ' + (sug - cur >= 0 ? '+' : '') + (sug - cur).toFixed(3) + ')';
+  if (calResult) info = 'Press SAVE_CONFIG to keep it';
+  setText('cal-cur', info);
+  if (calResult) $('cal-save-row').style.display = '';
 }
 
 function testz(val) {

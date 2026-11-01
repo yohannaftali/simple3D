@@ -96,7 +96,7 @@ The settings are saved in the browser, so each device only needs this once.
 | Change filament | **Filament**. Heat the nozzle with a preset, then **Unload** / **Load**. |
 | Start a print | **Files › Print** |
 | Adjust the first layer while printing | **Tools › Z Offset**. Use Nozzle up/down, then **Save** after the print. |
-| Calibrate Z offset (paper test) | **Tools › Z Offset**, then PROBE_CALIBRATE or Z_ENDSTOP_CALIBRATE |
+| Calibrate Z offset (paper test) | **Tools › Z Offset**, then PROBE_CALIBRATE or Z_ENDSTOP_CALIBRATE. The panel shows the live nozzle Z and the suggested new z_offset while you adjust |
 | Run a macro | **Tools › Macros** |
 | Run a macro with parameters | **Console › Macros**, then **Insert**, type the parameters, and **Send** |
 | Go full screen | **Settings › System › Full screen** (see *Full screen* below for app mode) |
