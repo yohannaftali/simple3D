@@ -198,3 +198,9 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - All update actions are disabled while printing; the list re-renders when the print lock changes.
 - Tested against the CB1's real `/machine/update/status` (Moonraker v0.11 reports the key `System` capitalised).
 - Printer: `~/simple3D` converted to a git clone of `main` (backup `~/simple3D.bak-20261101`).
+
+### Phase 8.4: Home header + console preview
+
+- Home header: printer name (Fluidd instanceName, then Mainsail printername, then `/printer/info` hostname) and network (`/machine/system_info`: first IPv4 on wlan, then eth; Wi-Fi or LAN icon). Moonraker doesn't report the SSID.
+- Home console preview `#home-log`: fills the space between the print info and the buttons and shows the last 40 gcode_store lines, colour-coded. It polls every 3s only while Home is visible, auto-scrolls (re-scrolled after layout via `homeLogScroll()`), and tapping it opens the Console page.
+- New `lan` icon.

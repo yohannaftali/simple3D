@@ -30,7 +30,7 @@ There are no build tools, no npm, and no framework. The whole app is one `index.
 
 - **One screen per page.** Each page fits the screen without scrolling; only long lists scroll inside their panel.
 - **Sidebar navigation** with icons, a connection indicator, and an **E-Stop** button.
-- **Home:** part thumbnail, progress, time left, layer, filament used, Pause / Resume / Cancel / Reprint, and live tiles for nozzle, bed, fans, speed, MCU and SoC.
+- **Home:** printer name and Wi-Fi/LAN address, part thumbnail, progress, time left, layer, filament used, and a live **console preview** (auto-scrolls; tap it to open the Console). Also Pause / Resume / Cancel / Reprint and live tiles for nozzle, bed, fans, speed, MCU and SoC.
 - **Control › Move:**
   - Joystick-style X/Y pad and a separate Z column.
   - Step size from 0.1 to 50 mm.
@@ -106,6 +106,7 @@ The settings are saved in the browser, so each device only needs this once.
 - **Thumbnails:** turn on G-code thumbnails in your slicer (e.g. `300x300`) for the Home and Files pictures.
 - **Layer counter:** have your slicer or start macro call `SET_PRINT_STATS_INFO TOTAL_LAYER=…` and `CURRENT_LAYER=…`.
 - **Load / Unload:** define `LOAD_FILAMENT` / `UNLOAD_FILAMENT` macros to control exactly how filament is changed.
+- **Printer name:** Home shows the name set in Fluidd (*Settings › General › Printer name*) or Mainsail; otherwise the board's hostname.
 - **Temperature/fan tiles:** the MCU, SoC, exhaust and hotend fan tiles read `temperature_sensor MCU`, `temperature_sensor SoC`, `fan_generic exhaust_fan` and `heater_fan hotend_fan`. Rename them in `WS_OBJECTS` inside `index.html` if your config uses other names.
 
 ### Kiosk tip (iOS)

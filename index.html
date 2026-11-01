@@ -157,6 +157,24 @@
   .ps-stats .ic { width: 15px; height: 15px; margin: -2px 4px 0 0; color: #a0c4ff; }
   .print-msg { font-size: 13px; color: #f0c040; margin-top: 6px; padding: 4px 8px; background: rgba(240,192,64,0.1); border-left: 3px solid #f0c040; border-radius: 2px; }
   .ps-btns button { min-height: 54px; font-size: 15px; }
+  .home-head { margin-bottom: 8px; font-size: 13px; color: #aab; white-space: nowrap; }
+  .home-head .sp { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 12px; }
+  .hh-name { font-size: 16px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; }
+  .hh-name .ic { width: 18px; height: 18px; margin: -3px 6px 0 0; color: #a0c4ff; }
+  .hh-net .ic { width: 16px; height: 16px; margin: -3px 5px 0 0; color: #27ae60; }
+  .hh-net span { font-family: monospace; }
+  /* Mini console on Home: auto-scrolls, tap opens the Console page */
+  .panel > .home-log {
+    overflow: hidden; min-height: 44px; margin: 8px 0;
+    background: #0a0a1a; border-radius: 8px; padding: 6px 8px;
+    font-family: monospace; font-size: 11px; line-height: 1.35; word-break: break-all;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .home-log:active { background: #11162a; }
+  .home-log .log-cmd { color: #a0c4ff; }
+  .home-log .log-resp { color: #ccc; }
+  .home-log .log-err { color: #e74c3c; }
+  .home-log .log-hint { color: #556; font-family: Arial, Helvetica, sans-serif; }
 
   .tiles { background: transparent; padding: 0; }
   .tile-row { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-height: 0; display: -webkit-box; display: -webkit-flex; display: flex; }
@@ -393,6 +411,11 @@
 <div class="page active" id="page-home">
   <div class="pg">
     <div class="panel" style="-webkit-box-flex:1.3;-webkit-flex:1.3;flex:1.3;">
+      <div class="home-head row">
+        <span class="hh-name"><i data-ic="cube"></i><span id="hh-name">Printer</span></span>
+        <span class="sp"></span>
+        <span class="hh-net"><i data-ic="wifi" id="hh-net-ic"></i><span id="hh-net">--</span></span>
+      </div>
       <div class="ps-top">
         <div class="ps-thumb" id="ps-thumb"><i data-ic="cube" id="ps-thumb-ph"></i><img id="ps-thumb-img" alt="" style="display:none;"></div>
         <div class="ps-info">
@@ -409,7 +432,7 @@
         <span id="print-times"></span>
       </div>
       <div id="print-msg" class="print-msg" style="display:none;"></div>
-      <div class="grow"></div>
+      <div id="home-log" class="grow home-log" onclick="showPage('console')" title="Open console"><div class="log-hint">Console output appears here. Tap to open the console.</div></div>
       <div class="btn-row ps-btns">
         <button onclick="printAction('pause')" class="warning" id="btn-pause"><i data-ic="pause"></i> Pause</button>
         <button onclick="printAction('resume')" class="success" id="btn-resume"><i data-ic="play"></i> Resume</button>
@@ -899,7 +922,8 @@ var ICONS = {
   'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   'minus': '<line x1="5" y1="12" x2="19" y2="12"/>',
   'send': '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
-  'check': '<polyline points="20 6 9 17 4 12"/>'
+  'check': '<polyline points="20 6 9 17 4 12"/>',
+  'lan': '<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-4h14v4"/><line x1="12" y1="8" x2="12" y2="12"/>'
 };
 
 function ic(name) {
@@ -952,6 +976,7 @@ function showPage(name) {
     }, 3000);
   }
   if (name === 'files') fetchJobs();
+  if (name === 'home') { homeLogScroll(); fetchHomeLog(); }
   if (name === 'control' && recall('tab_control') === 'temp') selectTemp(kpTarget);
 }
 
@@ -1108,6 +1133,8 @@ function handleWSMessage(data) {
     setStatus('Connected', 'green');
     // Fetch lists first so a UI update error can't block them
     fetchMacros();
+    fetchHostInfo();
+    fetchHomeLog();
     if (data.result.status) {
       mergeDeep(printerStatus, data.result.status);
       updateAllUI();
@@ -1954,6 +1981,84 @@ function clearConsole() {
   lastConsoleTime = 0;
 }
 
+// ----- Home: mini console (last lines, auto-scroll; tap opens Console) -----
+var homeLogTime = 0;
+var HOME_LOG_MAX = 40;
+
+function logLineEl(entry) {
+  var div = document.createElement('div');
+  var msg = entry.message || '';
+  if (entry.type === 'command') { div.className = 'log-cmd'; div.textContent = '> ' + msg; }
+  else if (msg.indexOf('!!') === 0 || entry.type === 'error') { div.className = 'log-err'; div.textContent = msg; }
+  else { div.className = 'log-resp'; div.textContent = msg; }
+  return div;
+}
+
+function fetchHomeLog() {
+  apiGet('/server/gcode_store?count=' + HOME_LOG_MAX, function(data) {
+    var r = data.result && data.result.gcode_store;
+    if (!r) return;
+    var log = $('home-log');
+    var added = false;
+    for (var i = 0; i < r.length; i++) {
+      if (r[i].time <= homeLogTime) continue;
+      if (!added) {
+        var hint = log.querySelector('.log-hint');
+        if (hint) log.removeChild(hint);
+      }
+      log.appendChild(logLineEl(r[i]));
+      homeLogTime = r[i].time;
+      added = true;
+    }
+    if (!added) return;
+    while (log.children.length > HOME_LOG_MAX) log.removeChild(log.firstChild);
+    homeLogScroll();
+  });
+}
+
+// Keep the newest line visible; re-run after layout settles (old WebKit)
+function homeLogScroll() {
+  var log = $('home-log');
+  log.scrollTop = log.scrollHeight;
+  setTimeout(function() { log.scrollTop = log.scrollHeight; }, 50);
+}
+
+// ----- Home header: printer name + network address -----
+// Name: Fluidd instance name > Mainsail printer name > Klipper host name
+function fetchHostInfo() {
+  var setName = function(n) { if (n) setText('hh-name', String(n)); };
+  apiGet('/printer/info', function(d) {
+    var host = d.result && d.result.hostname;
+    setName(host);
+    apiGet('/server/database/item?namespace=fluidd&key=uiSettings.general.instanceName', function(f) {
+      if (f.result && f.result.value) setName(f.result.value);
+    }, function() {
+      apiGet('/server/database/item?namespace=mainsail&key=general.printername', function(m) {
+        if (m.result && m.result.value) setName(m.result.value);
+      });
+    });
+  });
+  apiGet('/machine/system_info', function(d) {
+    var net = d.result && d.result.system_info && d.result.system_info.network;
+    if (!net) return;
+    // Prefer Wi-Fi, then wired; first non-link-local IPv4 address
+    var best = null, bestRank = 9;
+    for (var ifc in net) {
+      if (!net.hasOwnProperty(ifc)) continue;
+      var addrs = net[ifc].ip_addresses || [];
+      for (var i = 0; i < addrs.length; i++) {
+        var a = addrs[i];
+        if (a.family !== 'ipv4' || a.is_link_local) continue;
+        var rank = /^wl/.test(ifc) ? 0 : /^(eth|en)/.test(ifc) ? 1 : 2;
+        if (rank < bestRank) { best = { ifc: ifc, ip: a.address }; bestRank = rank; }
+      }
+    }
+    if (!best) return;
+    setText('hh-net', best.ifc + '  ' + best.ip);
+    $('hh-net-ic').innerHTML = ic(bestRank === 0 ? 'wifi' : 'lan');
+  });
+}
+
 // ----- Macro picker (Console > Macros) -----
 var macroList = [];     // sorted visible macro names, from fetchMacros()
 var gcodeHelp = null;   // { CMD: description } from /printer/gcode/help, loaded once
@@ -2281,6 +2386,8 @@ function showToast(msg) {
 
 loadSettings();
 renderIcons();
+// Home mini console refresh (only while Home is visible)
+setInterval(function() { if (currentPage === 'home' && BASE_URL) fetchHomeLog(); }, 3000);
 initTabs();
 (function() {
   var s = parseFloat(recall('move_step'));
