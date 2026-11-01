@@ -316,8 +316,28 @@
   .console-input-row > * + * { margin-left: 6px; }
   .console-input-row input { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
   .console-input-row button { -webkit-flex: none; flex: none; }
+  .pick-row {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid #2a2a4a;
+  }
+  .pick-row > * + * { margin-left: 8px; }
+  .pick-info { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 0; cursor: pointer; padding: 4px 0; }
+  .pick-name { font-family: monospace; font-size: 15px; color: #a0c4ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick-desc { font-size: 12px; color: #888; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick-row button { -webkit-flex: none; flex: none; min-width: 76px; }
 
   /* ===== SETTINGS ===== */
+  .upd-tbl { width: 100%; border-collapse: collapse; background: #0a0a1a; border-radius: 8px; margin-bottom: 8px; }
+  .upd-tbl td { padding: 6px 8px; font-family: monospace; font-size: 13px; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  .upd-tbl .pl { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #888; text-transform: uppercase; width: 100px; }
+  .upd-status { font-size: 13px; color: #ccc; padding: 6px 8px; border-radius: 6px; background: #0f3460; }
+  .upd-status.ok { background: #1a4731; }
+  .upd-status.warn { background: #4a3a1a; color: #f0c040; }
+  .upd-status.err { background: #4a1a1a; }
+  .upd-commits { margin-top: 6px; font-size: 12px; }
+  .upd-commits div { padding: 4px 2px; border-bottom: 1px solid #2a2a4a; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .upd-commits b { color: #a0c4ff; font-family: monospace; font-weight: normal; margin-right: 6px; }
   #status-bar { font-size: 13px; padding: 8px 10px; border-radius: 6px; margin-top: 10px; background: #0f3460; }
 
   #toast {
@@ -673,17 +693,29 @@
 
 <!-- ===== CONSOLE ===== -->
 <div class="page" id="page-console">
-  <div class="pg">
+  <div class="pg" id="con-main">
     <div class="panel">
       <div class="p-title row"><span><i data-ic="terminal"></i>Console</span><span class="sp"></span>
         <button class="btn-sm" onclick="clearConsole()"><i data-ic="trash"></i> Clear</button></div>
       <div id="console-log" class="grow"></div>
       <div class="console-input-row">
         <input type="text" id="console-input" placeholder="GCode command..." autocapitalize="off" autocorrect="off" onkeydown="consoleKey(event)">
+        <button onclick="openMacroPicker()" title="Pick a macro"><i data-ic="zap"></i> Macros</button>
         <button onclick="consoleHistNav(-1)" title="Previous command"><i data-ic="chev-up"></i></button>
         <button onclick="consoleHistNav(1)" title="Next command"><i data-ic="chev-down"></i></button>
         <button onclick="sendConsoleCmd()" class="success"><i data-ic="send"></i> Send</button>
       </div>
+    </div>
+  </div>
+  <!-- Macro picker: full page over the console; Insert puts the macro in the input, Run sends it -->
+  <div class="pg" id="con-pick" style="display:none;">
+    <div class="panel">
+      <div class="p-title row">
+        <button class="btn-sm" onclick="closeMacroPicker()"><i data-ic="chev-left"></i> Back</button>
+        <span style="margin-left:10px;"><i data-ic="zap"></i>Select Macro</span><span class="sp"></span>
+        <input type="text" id="pick-filter" placeholder="Filter..." autocapitalize="off" autocorrect="off" oninput="renderMacroPicker()" style="width:170px;-webkit-flex:none;flex:none;font-size:14px;padding:6px 10px;">
+      </div>
+      <div id="pick-list" class="grow"></div>
     </div>
   </div>
 </div>
@@ -717,6 +749,20 @@
         <button onclick="klipperRestart()" style="width:100%;margin-bottom:8px;"><i data-ic="reprint"></i> Restart Klipper (host)</button>
         <button onclick="location.reload()" style="width:100%;"><i data-ic="refresh"></i> Reload this UI</button>
         <p class="hint">After an E-Stop, Klipper is shut down. Use Firmware Restart to recover.</p>
+      </div>
+      <div class="panel">
+        <div class="p-title"><i data-ic="load"></i>simple3D Update</div>
+        <table class="upd-tbl">
+          <tr><td class="pl">Installed</td><td id="upd-local">--</td></tr>
+          <tr><td class="pl">Latest (main)</td><td id="upd-remote">--</td></tr>
+        </table>
+        <div id="upd-status" class="upd-status">Open this tab to check for updates.</div>
+        <div id="upd-commits" class="grow upd-commits"></div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button onclick="updCheck()" id="upd-check"><i data-ic="refresh"></i> Check</button>
+          <button onclick="updRun()" class="success" id="upd-run" disabled><i data-ic="load"></i> Update from main</button>
+        </div>
+        <button onclick="updRecover()" class="warning" id="upd-recover" style="display:none;width:100%;margin-top:8px;"><i data-ic="reprint"></i> Reset to main (discard local changes)</button>
       </div>
     </div>
   </div>
@@ -914,6 +960,7 @@ function showTab(page, tab) {
   store('tab_' + page, tab);
   // Keypad starts from the printer's current value each time it is opened
   if (page === 'control' && tab === 'temp') selectTemp(kpTarget);
+  if (page === 'settings' && tab === 'system') updStatus(false);
 }
 
 function initTabs() {
@@ -1073,6 +1120,8 @@ function handleWSMessage(data) {
     setStatus('Klipper offline', 'red'); setPrintStateUnknown();
   } else if (data.method === 'notify_klippy_shutdown') {
     setStatus('Klipper shutdown', 'red'); setPrintStateUnknown();
+  } else if (data.method === 'notify_update_response') {
+    updProgress(data.params && data.params[0]);
   }
 }
 
@@ -1237,20 +1286,25 @@ function apiGet(path, cb, errCb) {
   xhr.send();
 }
 
-function apiPost(path, data, cb) {
+// errCb(status, message) is optional; without it errors show as a toast.
+// timeoutMs defaults to 5s (updates need longer).
+function apiPost(path, data, cb, errCb, timeoutMs) {
   if (!BASE_URL) { showToast('Not connected — see Settings'); return; }
   var xhr = new XMLHttpRequest();
   xhr.open('POST', BASE_URL + path, true);
   xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.timeout = 5000;
+  xhr.timeout = timeoutMs || 5000;
   xhr.onreadystatechange = function() {
-    if (xhr.readyState === 4) {
-      if (xhr.status === 200) {
-        if (cb) try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
-      } else {
-        showToast('Error: ' + xhr.status);
-      }
+    if (xhr.readyState !== 4) return;
+    if (xhr.status === 200) {
+      if (cb) try { cb(JSON.parse(xhr.responseText)); } catch(e) {}
+      return;
     }
+    // Moonraker errors: { "error": { "message": "..." } }
+    var msg = xhr.status ? ('Error ' + xhr.status) : 'No response';
+    try { var j = JSON.parse(xhr.responseText); if (j && j.error && j.error.message) msg = j.error.message; } catch(e) {}
+    if (errCb) errCb(xhr.status, msg);
+    else showToast(msg);
   };
   xhr.send(data ? JSON.stringify(data) : null);
 }
@@ -1665,6 +1719,7 @@ function fetchMacros() {
         if (name.charAt(0) !== '_') macros.push(name);
       }
     }
+    macroList = macros.slice().sort();
     renderTools(objects, macros);
     if (macros.length === 0) {
       el.innerHTML = '<p class="hint">No macros found.</p>';
@@ -1890,6 +1945,79 @@ function clearConsole() {
   lastConsoleTime = 0;
 }
 
+// ----- Macro picker (Console > Macros) -----
+var macroList = [];     // sorted visible macro names, from fetchMacros()
+var gcodeHelp = null;   // { CMD: description } from /printer/gcode/help, loaded once
+var pickItems = [];     // currently listed (filtered) names
+
+function openMacroPicker() {
+  $('con-main').style.display = 'none';
+  $('con-pick').style.display = '';
+  $('pick-filter').value = '';
+  renderMacroPicker();
+  if (!macroList.length) fetchMacros();
+  if (!gcodeHelp) {
+    apiGet('/printer/gcode/help', function(d) {
+      gcodeHelp = d.result || {};
+      renderMacroPicker();
+    });
+  }
+}
+
+function closeMacroPicker() {
+  $('con-pick').style.display = 'none';
+  $('con-main').style.display = '';
+  var log = $('console-log');
+  log.scrollTop = log.scrollHeight;
+}
+
+function macroDesc(name) {
+  if (!gcodeHelp) return '';
+  var d = gcodeHelp[name] || gcodeHelp[name.toUpperCase()] || '';
+  return d === 'G-Code macro' ? '' : d;   // Klipper's default description
+}
+
+function renderMacroPicker() {
+  var q = $('pick-filter').value.trim().toUpperCase();
+  pickItems = [];
+  for (var i = 0; i < macroList.length; i++) {
+    var n = macroList[i];
+    if (!q || n.toUpperCase().indexOf(q) !== -1 || macroDesc(n).toUpperCase().indexOf(q) !== -1) pickItems.push(n);
+  }
+  if (!pickItems.length) {
+    $('pick-list').innerHTML = '<p class="hint">' + (macroList.length ? 'No macro matches.' : 'Loading macros...') + '</p>';
+    return;
+  }
+  var html = '';
+  for (var j = 0; j < pickItems.length; j++) {
+    var desc = macroDesc(pickItems[j]);
+    html += '<div class="pick-row">' +
+      '<div class="pick-info" onclick="pickMacro(' + j + ',false)"><div class="pick-name">' + escHtml(pickItems[j]) + '</div>' +
+      (desc ? '<div class="pick-desc">' + escHtml(desc) + '</div>' : '') + '</div>' +
+      '<button onclick="pickMacro(' + j + ',false)">Insert</button>' +
+      '<button onclick="pickMacro(' + j + ',true)" class="success">' + ic('play') + ' Run</button>' +
+      '</div>';
+  }
+  $('pick-list').innerHTML = html;
+}
+
+// run=false: put "NAME " in the input to add parameters; run=true: send now
+function pickMacro(idx, run) {
+  var name = pickItems[idx];
+  if (!name) return;
+  var input = $('console-input');
+  closeMacroPicker();
+  if (run) {
+    input.value = name;
+    sendConsoleCmd();
+  } else {
+    input.value = name + ' ';
+    consoleHistIdx = consoleHistory.length;
+    consoleDraft = input.value;
+    input.focus();
+  }
+}
+
 (function() {
   var log = $('console-log');
   log.addEventListener('scroll', function() {
@@ -1907,6 +2035,133 @@ function clearConsole() {
     input.focus();
   });
 })();
+
+// ===== SELF-UPDATE (Moonraker update_manager, git pull from main) =====
+// Needs this in moonraker.conf (Moonraker does the git pull, not the browser):
+//   [update_manager simple3d]
+//   type: git_repo
+//   path: ~/simple3D
+//   origin: https://github.com/yohannaftali/simple3D.git
+//   primary_branch: main
+//   is_system_service: False
+var UPD_NAME = 'simple3d';
+var updBusy = false;
+
+function updSetStatus(msg, cls) {
+  var el = $('upd-status');
+  el.textContent = msg;
+  el.className = 'upd-status' + (cls ? ' ' + cls : '');
+}
+
+function updButtons(canRun) {
+  $('upd-check').disabled = updBusy;
+  $('upd-run').disabled = updBusy || !canRun;
+  $('upd-recover').disabled = updBusy;
+}
+
+// refresh=true asks Moonraker to fetch from GitHub first (Check button)
+function updStatus(refresh) {
+  if (updBusy) return;
+  if (!BASE_URL) { updSetStatus('Not connected', 'err'); return; }
+  if (refresh) {
+    updBusy = true; updButtons(false);
+    updSetStatus('Checking GitHub...', '');
+    apiPost('/machine/update/refresh?name=' + UPD_NAME, null, function(d) {
+      updBusy = false; updRender(d.result);
+    }, function(status, msg) {
+      updBusy = false; updButtons(false);
+      updSetStatus(status === 404 || /not found|no updater/i.test(msg) ? updNotSetUpMsg() : ('Check failed: ' + msg), status === 404 ? 'warn' : 'err');
+    }, 60000);
+    return;
+  }
+  apiGet('/machine/update/status', function(d) { updRender(d.result); },
+    function() { updSetStatus('Could not read update status from Moonraker', 'err'); });
+}
+
+function updNotSetUpMsg() {
+  return 'Not set up: add [update_manager simple3d] to moonraker.conf and make ~/simple3D a git clone (see README).';
+}
+
+function updRender(r) {
+  var info = (r && r.version_info) || {};
+  var vi = null;
+  for (var k in info) {
+    if (info.hasOwnProperty(k) && k.toLowerCase() === UPD_NAME) vi = info[k];
+  }
+  $('upd-commits').innerHTML = '';
+  if (!vi) {
+    setText('upd-local', '--'); setText('upd-remote', '--');
+    $('upd-recover').style.display = 'none';
+    updSetStatus(updNotSetUpMsg(), 'warn');
+    updButtons(false);
+    return;
+  }
+  setText('upd-local', vi.full_version_string || vi.version || '?');
+  setText('upd-remote', vi.remote_version || '?');
+  var behind = vi.commits_behind || [];
+  var count = typeof vi.commits_behind_count === 'number' ? vi.commits_behind_count : behind.length;
+  var html = '';
+  for (var i = 0; i < behind.length && i < 15; i++) {
+    var c = behind[i];
+    html += '<div><b>' + escHtml(String(c.sha || '').slice(0, 7)) + '</b>' + escHtml(c.subject || '') + '</div>';
+  }
+  $('upd-commits').innerHTML = html;
+  var broken = vi.is_dirty || vi.is_valid === false || vi.corrupt || vi.detached;
+  $('upd-recover').style.display = broken ? '' : 'none';
+  if (vi.is_dirty) {
+    updSetStatus('Files in ~/simple3D were changed by hand (e.g. scp). Reset to main before updating.', 'warn');
+  } else if (vi.is_valid === false || vi.corrupt) {
+    var w = (vi.warnings && vi.warnings.length) ? vi.warnings.join(' ') : 'Repo is not valid.';
+    updSetStatus(w, 'warn');
+  } else if (count > 0) {
+    updSetStatus(count + ' update' + (count > 1 ? 's' : '') + ' available on main', '');
+  } else {
+    updSetStatus('Up to date', 'ok');
+  }
+  updButtons(count > 0 && !broken);
+}
+
+function updRun() {
+  if (!confirm('Update simple3D from GitHub main?\nThe page reloads when done.')) return;
+  updBusy = true; updButtons(false);
+  updSetStatus('Updating...', '');
+  var ok = function() {
+    updBusy = false;
+    updSetStatus('Updated. Reloading...', 'ok');
+    setTimeout(function() { location.reload(); }, 1500);
+  };
+  var fail = function(status, msg) {
+    updBusy = false;
+    updSetStatus('Update failed: ' + msg, 'err');
+    updButtons(true);
+  };
+  // /upgrade is current Moonraker; /client is the older name for the same action
+  apiPost('/machine/update/upgrade?name=' + UPD_NAME, null, ok, function(status, msg) {
+    if (status === 404) apiPost('/machine/update/client?name=' + UPD_NAME, null, ok, fail, 180000);
+    else fail(status, msg);
+  }, 180000);
+}
+
+function updRecover() {
+  if (!confirm('Discard local changes in ~/simple3D and reset it to GitHub main?')) return;
+  updBusy = true; updButtons(false);
+  updSetStatus('Resetting to main...', '');
+  apiPost('/machine/update/recover?name=' + UPD_NAME + '&hard=true', null, function() {
+    updBusy = false;
+    updSetStatus('Reset done. Reloading...', 'ok');
+    setTimeout(function() { location.reload(); }, 1500);
+  }, function(status, msg) {
+    updBusy = false;
+    updSetStatus('Reset failed: ' + msg, 'err');
+    updButtons(false);
+  }, 180000);
+}
+
+// Live progress lines pushed by Moonraker during refresh/upgrade/recover
+function updProgress(p) {
+  if (!p || !p.application || String(p.application).toLowerCase() !== UPD_NAME) return;
+  if (p.message) updSetStatus(p.message, '');
+}
 
 // ===== STATUS / TOAST =====
 

@@ -1,84 +1,181 @@
-# simple3D — Klipper Web UI for Legacy Devices
+# simple3D — Klipper Touch UI for 7" Screens and Legacy Devices
 
-A minimal, single-file HTML web UI for controlling a Klipper 3D printer via the Moonraker API.
+A minimal, single-file web UI for controlling a Klipper 3D printer through the Moonraker API.
 
-Built specifically for **old iOS devices (iOS 10, Safari)** that can no longer run modern UIs like Fluidd or Mainsail. No build tools, no npm, no framework — just one `index.html`.
+It is built for **small touchscreens (7", 800×480 to 1024×600)** and **old browsers such as iOS 10 Safari**, which can't run Fluidd or Mainsail. The layout borrows from KlipperScreen and the Bambu Lab printer screen: a sidebar to pick a page, and tabs to switch between a page's sub-pages.
+
+There are no build tools, no npm, and no framework. The whole app is one `index.html` file.
+
+## Screenshots
+
+> These screenshots use demo data and were captured at 800×480. Part thumbnails appear when your slicer embeds them in the G-code.
+
+| Home | Control › Move |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![Move](docs/screenshots/control-move.png) |
+
+| Control › Temperature | Filament |
+|---|---|
+| ![Temperature](docs/screenshots/control-temperature.png) | ![Filament](docs/screenshots/filament.png) |
+
+| Tools › Calibrate | Tools › Z Offset |
+|---|---|
+| ![Calibrate](docs/screenshots/tools-calibrate.png) | ![Z Offset](docs/screenshots/tools-zoffset.png) |
+
+| Files | Settings |
+|---|---|
+| ![Files](docs/screenshots/files.png) | ![Settings](docs/screenshots/settings.png) |
 
 ## Features
 
-- Temperature monitor & control (hotend + bed)
-- Print status with progress bar (pause / resume / cancel)
-- Axis movement controls (X/Y/Z) with adjustable step size
-- Quad Gantry Level shortcut (shown only on printers with `[quad_gantry_level]`)
-- Calibration Tools: CLEAN_NOZZLE, MANUAL_PROBE, PROBE_ACCURACY, PROBE_CALIBRATE and any `PID_EXTRUDER_*` / `PID_HEATER_BED_*` macros
-- Fan speed & print speed control
-- Custom GCode input
-- Collapsible connection settings (accordion)
-- Every Main-page card can be collapsed, dragged to reorder, and resized (grip in the bottom-right corner; double-tap it to reset)
-- **Portrait:** scrollable single column
-- **Landscape:** fixed 2-column layout, fits one screen without scrolling
-- Connection settings saved in browser `localStorage`
+- **One screen per page.** Each page fits the screen without scrolling; only long lists scroll inside their panel.
+- **Sidebar navigation** with icons, a connection indicator, and an **E-Stop** button.
+- **Home:** part thumbnail, progress, time left, layer, filament used, Pause / Resume / Cancel / Reprint, and live tiles for nozzle, bed, fans, speed, MCU and SoC.
+- **Control › Move:**
+  - Joystick-style X/Y pad and a separate Z column.
+  - Step size from 0.1 to 50 mm.
+  - **Actual / Target** position, like Mainsail and Fluidd.
+  - Home All, Motors Off, **Quad Gantry Level**, Z Tilt, and a shortcut to Z Offset.
+- **Control › Temperature:** choose nozzle, bed, part fan or print speed, then use presets or an on-screen keypad. No keyboard pops up.
+- **Filament (Bambu style):**
+  - Nozzle temperature with −/+ buttons and material presets (PLA, PETG, ABS, ASA, TPU, PA).
+  - Extrude / Retract with adjustable distance and speed.
+  - **Load / Unload** run your `LOAD_FILAMENT` / `UNLOAD_FILAMENT` macros when they exist, and fall back to plain G-code otherwise.
+- **Files:** G-code list with thumbnails, estimated time and filament length.
+- **Tools:**
+  - Macros: every visible `gcode_macro`.
+  - Calibrate: QGL, Z tilt, bed mesh, probe accuracy and calibrate, PID macros, endstops, stepper buzz.
+  - Z Offset: live baby-stepping during a print, plus the paper-test calibration.
+- **Console:** G-code log with command history and a **Macros** picker page (filter, descriptions, Insert to add parameters, or Run).
+- **Settings:** Moonraker connection, Firmware Restart, Restart Klipper, and a **self-update** button (git pull from `main` through Moonraker).
+- **Print lock:** while a print runs, the Move, Extruder, Macros and Calibrate controls are disabled. Pause, Cancel and Z Offset stay usable.
+- **Live data** comes over the Moonraker WebSocket.
 
 ## Requirements
 
-- Klipper + Moonraker running on your printer's board (e.g. BTT CB1, Raspberry Pi)
-- Python 3 on the board (pre-installed on most Klipper images)
-- Git (for installation)
+- Klipper + Moonraker running on your printer's board (e.g. BTT CB1, Raspberry Pi).
+- Python 3 on the board (pre-installed on most Klipper images).
+- A browser on the same network: a 7" touchscreen, a tablet, or an old iPad/iPhone.
 
-## Installation
+## Installation on the Printer
 
-SSH into your board, then:
+SSH into the board, then:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/simple3D.git ~/simple3D
+git clone https://github.com/yohannaftali/simple3D.git ~/simple3D
 cd ~/simple3D
 chmod +x install_service.sh
 ./install_service.sh
 ```
 
-The service will start automatically and will run on every boot.
+This installs the `simple3d` systemd service. It runs `python3 -m http.server 8080` in `~/simple3D` and starts on every boot.
 
-Access the UI from any browser on your local network:
+> `simple3d.service` assumes the user is `biqu` (BTT CB1). On a Raspberry Pi or another image, change `User=` and `WorkingDirectory=` first, for example to `pi` and `/home/pi/simple3D`.
+
+Then open the UI from any browser on your local network:
 
 ```
 http://<your-board-ip>:8080
 ```
 
-## First Run
+## Usage
 
-1. Open `http://<board-ip>:8080` in your browser
-2. Click the **Connection** header to expand settings (if collapsed)
-3. Enter your Moonraker IP (usually the same as the board IP) and port (default: `7125`)
-4. Click **Save & Connect**
+### First run
+1. Open `http://<board-ip>:8080`. With no printer saved yet, it opens on **Settings › Connection**.
+2. Enter the Moonraker IP (usually the board's IP) and port (default `7125`).
+3. Tap **Save & Connect**. The dot on the Settings icon turns green once connected.
 
-Settings are saved in the browser — you only need to enter them once.
+The settings are saved in the browser, so each device only needs this once.
 
-## Updating
+### Everyday use
+| To… | Go to |
+|---|---|
+| Watch or control a print | **Home**. Tap a temperature or fan tile to change it. |
+| Home, jog or level the gantry | **Control › Move** |
+| Set nozzle / bed temperature, fan or speed | **Control › Temperature**. Tap a row, then a preset or type on the keypad and tap **Set**. |
+| Change filament | **Filament**. Heat the nozzle with a preset, then **Unload** / **Load**. |
+| Start a print | **Files › Print** |
+| Adjust the first layer while printing | **Tools › Z Offset**. Use Nozzle up/down, then **Save** after the print. |
+| Calibrate Z offset (paper test) | **Tools › Z Offset**, then PROBE_CALIBRATE or Z_ENDSTOP_CALIBRATE |
+| Run a macro | **Tools › Macros** |
+| Run a macro with parameters | **Console › Macros**, then **Insert**, type the parameters, and **Send** |
+| Recover after an E-Stop | **Settings › System › Firmware Restart** |
+| Update simple3D | **Settings › System**, then **Check** and **Update from main** |
+
+### Optional printer setup
+- **Thumbnails:** turn on G-code thumbnails in your slicer (e.g. `300x300`) for the Home and Files pictures.
+- **Layer counter:** have your slicer or start macro call `SET_PRINT_STATS_INFO TOTAL_LAYER=…` and `CURRENT_LAYER=…`.
+- **Load / Unload:** define `LOAD_FILAMENT` / `UNLOAD_FILAMENT` macros to control exactly how filament is changed.
+- **Temperature/fan tiles:** the MCU, SoC, exhaust and hotend fan tiles read `temperature_sensor MCU`, `temperature_sensor SoC`, `fan_generic exhaust_fan` and `heater_fan hotend_fan`. Rename them in `WS_OBJECTS` inside `index.html` if your config uses other names.
+
+### Kiosk tip (iOS)
+In Safari, tap **Share › Add to Home Screen** to open the UI full-screen without the browser bars.
+
+## Updating from the UI (git pull from `main`)
+
+**Settings › System › simple3D Update** shows the installed and latest versions and the new commits on `main`. **Update from main** pulls them in, then the page reloads.
+
+The browser can't run `git` itself. Moonraker's update manager does the pull, so one-time setup on the printer is needed:
+
+1. `~/simple3D` must be a git clone, as created by the Installation steps above. If you deployed with `scp` before, convert it:
+   ```bash
+   cd ~/simple3D
+   git init -b main
+   git remote add origin https://github.com/yohannaftali/simple3D.git
+   git fetch origin main
+   git reset --hard origin/main
+   git branch -u origin/main
+   ```
+2. Add this to `~/printer_data/config/moonraker.conf`:
+   ```ini
+   [update_manager simple3d]
+   type: git_repo
+   path: ~/simple3D
+   origin: https://github.com/yohannaftali/simple3D.git
+   primary_branch: main
+   is_system_service: False
+   ```
+3. Restart Moonraker: `sudo systemctl restart moonraker`.
+
+simple3D then also appears in Fluidd/Mainsail's update list. Moonraker refuses updates while a print is running.
+
+> If you copy files with `scp` into a git-managed `~/simple3D`, Moonraker reports the repo as *dirty* and blocks updates. Tap **Reset to main** to discard the local copy, or push your change to GitHub and update instead.
+
+## Deploying Changes to the Machine
+
+The service serves files statically, so **no restart is needed**. Copy the new `index.html` and reload the browser.
+
+**From a dev machine** (Windows PowerShell, macOS or Linux), with an SSH alias such as `voron` set up in `~/.ssh/config`:
+
+```powershell
+scp index.html voron:~/simple3D/
+```
+
+To check that the deployed file matches your local copy:
+
+```bash
+ssh voron "md5sum ~/simple3D/index.html"   # compare with your local hash
+```
+
+**If the board has a git clone of the repo:**
 
 ```bash
 cd ~/simple3D
 git pull
 ```
 
-No service restart needed — files are served statically.
+If a screen still shows the old version after deploying, reload the page. Some old browsers cache aggressively.
 
 ## Service Management
 
 ```bash
-# Check status
-sudo systemctl status simple3d
-
-# Restart
-sudo systemctl restart simple3d
-
-# Stop
-sudo systemctl stop simple3d
-
-# Disable autostart
-sudo systemctl disable simple3d
+sudo systemctl status simple3d     # check status
+sudo systemctl restart simple3d    # restart
+sudo systemctl stop simple3d       # stop
+sudo systemctl disable simple3d    # disable autostart
 ```
 
-## Manual Run (without service)
+### Manual run (without the service)
 
 ```bash
 cd ~/simple3D
@@ -89,19 +186,21 @@ python3 -m http.server 8080
 
 ```
 simple3D/
-├── index.html          # entire application (single file)
-├── simple3d.service    # systemd service definition
-├── install_service.sh  # installer script
+├── index.html            # entire application (single file)
+├── simple3d.service      # systemd service definition
+├── install_service.sh    # installer script
+├── docs/screenshots/     # README images
+├── CHANGE_HISTORY.md     # implementation notes per phase
 └── README.md
 ```
 
 ## Compatibility
 
-Tested on:
-- iOS 10 Safari (target device)
-- Modern browsers (Chrome, Firefox, Safari)
+- 7" touchscreens in landscape (800×480, 1024×600); portrait also works and scrolls.
+- iOS 10 Safari and other legacy WebKit browsers.
+- Modern Chrome, Firefox, Safari and Edge.
 
-The UI uses ES5 JavaScript and `-webkit-` CSS prefixes for maximum browser compatibility.
+The code is plain ES5 JavaScript (no `let`/`const`, arrow functions, `fetch` or Promises) and uses `-webkit-` prefixed flexbox (no CSS grid). Icons are inline SVG, so nothing loads from the internet.
 
 ## License
 

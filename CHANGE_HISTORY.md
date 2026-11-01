@@ -184,3 +184,9 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - The Quad Gantry Level button is always visible, under Home All / Motors Off. `runQgl()` offers `G28` -> `QUAD_GANTRY_LEVEL` -> `G28 Z` when not homed, and warns if the config has no `[quad_gantry_level]`.
 - Z Offset button (shows the current offset) jumps to Tools > Z Offset. It is `.nolock`, so it works while printing.
 - The position readout is now an Actual / Target table like Mainsail/Fluidd. Actual = `motion_report.live_position`, Target = `gcode_move.gcode_position`, and the axis letter turns green when homed. WS subscription adds `motion_report` and `gcode_move.gcode_position`.
+
+### Phase 8.2: Self-update and Console macro picker
+
+- **Settings › System › simple3D Update:** shows installed vs latest version and the commits behind. Check (`/machine/update/refresh`), Update from main (`/machine/update/upgrade`, with `/client` as a fallback), and Reset to main (`/machine/update/recover?hard=true`), which appears only when the repo is dirty or invalid. Progress comes from `notify_update_response`; the page reloads after updating. This needs `[update_manager simple3d]` in moonraker.conf (see README).
+- `apiPost()` gained `errCb(status, message)` (Moonraker error message) and `timeoutMs`.
+- **Console › Macros:** a full-page picker listing all visible macros, with descriptions from `/printer/gcode/help` and a filter box. Insert puts `NAME ` in the input for parameters; Run sends it and goes back to the log.
