@@ -68,7 +68,7 @@ chmod +x install_service.sh
 ./install_service.sh
 ```
 
-This installs the `simple3d` systemd service. It runs `python3 -m http.server 8080` in `~/simple3D` and starts on every boot.
+This installs the `simple3d` systemd service, which starts on every boot. It runs `server.py` (standard-library Python, nothing to install) on port 8080. `server.py` serves the UI and lets it update itself with `git pull`. It also hides the `.git` folder from the network.
 
 > `simple3d.service` assumes the user is `biqu` (BTT CB1). On a Raspberry Pi or another image, change `User=` and `WorkingDirectory=` first, for example to `pi` and `/home/pi/simple3D`.
 
@@ -114,47 +114,42 @@ In Safari, tap **Share › Add to Home Screen** to open the UI full-screen witho
 
 ## Updating from the UI
 
-**Settings › Update** lists everything Moonraker's update manager tracks: simple3D, Klipper, Moonraker, System (OS packages), and any other entries such as Fluidd or KlipperScreen.
+**Settings › Update** has one row per piece of software, each with an **Update** button:
+
+| Row | Updated by | While printing |
+|---|---|---|
+| **simple3D (this UI)** | `server.py` runs `git pull --ff-only origin main` in `~/simple3D` | Allowed (only web files change) |
+| Klipper, Moonraker, System (OS packages), Fluidd, KlipperScreen, … | Moonraker's update manager | Disabled (they restart services) |
+
 - Each row shows the installed version and a badge (*Up to date*, *N new*, *N packages*, *Modified*). Tap a row to see the new commits or packages.
-- **Update** updates that item. **Update all** does everything. **Repair** appears when a repo has local changes.
-- After updating simple3D, the page reloads by itself.
-- Updates are disabled while a print is running.
+- **Check** looks for new versions. **Update all** updates everything Moonraker manages.
+- **Repair** appears when a repo has local changes. For simple3D it resets `~/simple3D` to `origin/main`.
+- After updating simple3D, the page reloads by itself. If `server.py` itself changed, it restarts automatically (systemd `Restart=always`).
+- No `moonraker.conf` entry is needed for simple3D.
 
-Klipper, Moonraker and System work out of the box. For **simple3D itself** (a git pull from `main`), Moonraker needs a one-time setup on the printer, because the browser can't run `git`:
+`~/simple3D` must be a git clone, as created by the Installation steps above. If you deployed with `scp` before, convert it once:
 
-1. `~/simple3D` must be a git clone, as created by the Installation steps above. If you deployed with `scp` before, convert it:
-   ```bash
-   cd ~/simple3D
-   git init -b main
-   git remote add origin https://github.com/yohannaftali/simple3D.git
-   git fetch origin main
-   git reset --hard origin/main
-   git branch -u origin/main
-   ```
-2. Add this to `~/printer_data/config/moonraker.conf`:
-   ```ini
-   [update_manager simple3d]
-   type: git_repo
-   path: ~/simple3D
-   origin: https://github.com/yohannaftali/simple3D.git
-   primary_branch: main
-   is_system_service: False
-   ```
-3. Restart Moonraker: `sudo systemctl restart moonraker`.
+```bash
+cd ~/simple3D
+git init -b main
+git remote add origin https://github.com/yohannaftali/simple3D.git
+git fetch origin main
+git reset --hard origin/main
+git branch -u origin/main
+./install_service.sh        # switch the service to server.py
+```
 
-simple3D then also appears in Fluidd/Mainsail's update list. Moonraker refuses updates while a print is running.
-
-> If you copy files with `scp` into a git-managed `~/simple3D`, Moonraker reports the repo as *dirty* and blocks updates. Tap **Reset to main** to discard the local copy, or push your change to GitHub and update instead.
+> Optional: if you also want simple3D in Fluidd/Mainsail's update list, add an `[update_manager simple3d]` (`type: git_repo`, `path: ~/simple3D`, `primary_branch: main`, `is_system_service: False`) to `moonraker.conf`. The UI then still uses `server.py` for its own row.
 
 ## Deploying Changes to the Machine
 
-The service serves files statically, so **no restart is needed**. Copy the new `index.html` and reload the browser.
+The recommended flow is **push to GitHub, then update on the printer**. Either tap **Settings › Update › simple3D › Update**, or run:
 
-**From a dev machine** (Windows PowerShell, macOS or Linux), with an SSH alias such as `voron` set up in `~/.ssh/config`:
-
-```powershell
-scp index.html voron:~/simple3D/
+```bash
+ssh voron "cd ~/simple3D && git pull --ff-only"
 ```
+
+No restart is needed for `index.html` changes; reload the browser. If you change `simple3d.service`, run `./install_service.sh` again on the printer. Restarting simple3d only reloads the web UI and is safe during a print.
 
 To check that the deployed file matches your local copy:
 
@@ -162,14 +157,9 @@ To check that the deployed file matches your local copy:
 ssh voron "md5sum ~/simple3D/index.html"   # compare with your local hash
 ```
 
-**If the board has a git clone of the repo:**
+> Quick test without pushing: `scp index.html voron:~/simple3D/` works, but it marks the repo as *Modified*. Tap **Repair** afterwards (or push the change) to go back to normal updates.
 
-```bash
-cd ~/simple3D
-git pull
-```
-
-If a screen still shows the old version after deploying, reload the page. Some old browsers cache aggressively.
+If a screen still shows the old version after deploying, reload the page. Some old browsers cache aggressively; `server.py` sends `Cache-Control: no-cache` for the page to help.
 
 ## Service Management
 
@@ -184,7 +174,7 @@ sudo systemctl disable simple3d    # disable autostart
 
 ```bash
 cd ~/simple3D
-python3 -m http.server 8080
+python3 server.py --port 8080      # --bind 127.0.0.1 to test locally
 ```
 
 ## File Structure
@@ -192,7 +182,8 @@ python3 -m http.server 8080
 ```
 simple3D/
 ├── index.html            # entire application (single file)
-├── simple3d.service      # systemd service definition
+├── server.py             # web server + self-update API (git pull from main)
+├── simple3d.service      # systemd service definition (runs server.py)
 ├── install_service.sh    # installer script
 ├── docs/screenshots/     # README images
 ├── CHANGE_HISTORY.md     # implementation notes per phase

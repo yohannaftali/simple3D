@@ -6,8 +6,11 @@ After=network.target
 Type=simple
 User=biqu
 WorkingDirectory=/home/biqu/simple3D
-ExecStart=/usr/bin/python3 -m http.server 8080
-Restart=on-failure
+# server.py = static file server + self-update API (git pull from main)
+ExecStart=/usr/bin/python3 /home/biqu/simple3D/server.py --port 8080
+# Always restart: server.py exits on purpose after updating itself
+Restart=always
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target

@@ -204,3 +204,13 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - Home header: printer name (Fluidd instanceName, then Mainsail printername, then `/printer/info` hostname) and network (`/machine/system_info`: first IPv4 on wlan, then eth; Wi-Fi or LAN icon). Moonraker doesn't report the SSID.
 - Home console preview `#home-log`: fills the space between the print info and the buttons and shows the last 40 gcode_store lines, colour-coded. It polls every 3s only while Home is visible, auto-scrolls (re-scrolled after layout via `homeLogScroll()`), and tapping it opens the Console page.
 - New `lan` icon.
+
+### Phase 8.5: server.py self-update (no moonraker.conf needed)
+
+- New `server.py` replaces `python3 -m http.server`. It is standard-library only and:
+  - serves the static files, blocks dot-paths (the `.git` folder was publicly readable with http.server once `~/simple3D` became a git clone), and sends no-cache for the page;
+  - `GET /api/self/status[?fetch=1]` returns local/remote commit, commits behind (max 30), ahead, dirty, and fetch_error;
+  - `POST /api/self/update[?force=1]` does a ff-only merge of origin/main (force: hard reset). It returns 409 when dirty and not forced. If `server.py` changed, it exits with code 75 and systemd (`Restart=always`) starts the new version.
+- The simple3D row in Settings > Update now uses server.py and is allowed while printing; Moonraker rows stay locked. A Moonraker `simple3d` entry is hidden when server.py answers.
+- `simple3d.service`: ExecStart is server.py, `Restart=always`, `RestartSec=2`. `install_service.sh` now restarts (not just starts) and is safe to re-run.
+- Tested end-to-end against a local bare repo: behind=1 shown in the UI, ff update, and a self-restart on a server.py change (exit 75).

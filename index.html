@@ -2150,22 +2150,20 @@ function pickMacro(idx, run) {
   });
 })();
 
-// ===== SOFTWARE UPDATES (Moonraker update_manager) =====
-// Lists everything Moonraker's update manager tracks: simple3D, Klipper,
-// Moonraker, System (OS packages) and any other [update_manager x] entry.
-// simple3D needs this in moonraker.conf (Moonraker runs the git pull):
-//   [update_manager simple3d]
-//   type: git_repo
-//   path: ~/simple3D
-//   origin: https://github.com/yohannaftali/simple3D.git
-//   primary_branch: main
-//   is_system_service: False
+// ===== SOFTWARE UPDATES =====
+// simple3D itself: updated by its own server.py (same origin as this page):
+//   GET /api/self/status?fetch=1, POST /api/self/update[?force=1]
+// Everything else (Klipper, Moonraker, System, Fluidd, ...): Moonraker's
+// update_manager. If Moonraker also has a [update_manager simple3d] entry,
+// that row is hidden in favour of the server.py one.
 var UPD_SELF = 'simple3d';
+var SELF_KEY = '__self';
 var UPD_LABELS = { simple3d: 'simple3D (this UI)', klipper: 'Klipper', moonraker: 'Moonraker', system: 'System (OS packages)' };
 var updBusy = false;
-var updLast = null;      // last status result, re-rendered when the print lock changes
-var updItems = [];       // rendered names, indexed by row
-var updOpen = {};        // name -> commit list expanded
+var updLast = null;      // last Moonraker status result
+var selfInfo = null;     // last server.py status ({error} if unavailable)
+var updItems = [];       // row index -> key (SELF_KEY or Moonraker name)
+var updOpen = {};        // key -> details expanded
 
 function updSetStatus(msg, cls) {
   var el = $('upd-status');
@@ -2175,26 +2173,51 @@ function updSetStatus(msg, cls) {
 
 function updLabel(name) { return UPD_LABELS[name.toLowerCase()] || name; }
 
-// refresh=true asks Moonraker to fetch from the remotes first (Check button)
-function updStatus(refresh) {
-  if (updBusy) return;
-  if (!BASE_URL) { updSetStatus('Not connected', 'err'); return; }
-  if (refresh) {
-    updBusy = true; updRender(updLast);
-    updSetStatus('Checking for updates...', '');
-    apiPost('/machine/update/refresh', null, function(d) {
-      updBusy = false; updRender(d.result); updSummary();
-    }, function(status, msg) {
-      updBusy = false; updRender(updLast);
-      updSetStatus('Check failed: ' + msg, 'err');
-    }, 120000);
-    return;
-  }
-  apiGet('/machine/update/status', function(d) { updRender(d.result); updSummary(); },
-    function() { updSetStatus('Could not read update status from Moonraker', 'err'); });
+// ----- server.py API (relative URL: same server that served this page) -----
+function selfRequest(method, path, cb, errCb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open(method, path, true);
+  xhr.timeout = 120000;
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4) return;
+    var data = null;
+    try { data = JSON.parse(xhr.responseText); } catch(e) {}
+    if (xhr.status === 200 && data) { cb(data); return; }
+    var msg = (data && data.error) ||
+      (xhr.status === 404 || xhr.status === 501 ? 'server.py is not running (old http.server)' :
+       xhr.status ? 'Error ' + xhr.status : 'No response');
+    errCb(xhr.status, msg, data);
+  };
+  xhr.send(null);
 }
 
-// Per-entry state: { count, label (badge), broken, ver }
+function selfStatus(fetch, done) {
+  selfRequest('GET', 'api/self/status' + (fetch ? '?fetch=1' : ''), function(d) {
+    selfInfo = d; if (done) done();
+  }, function(status, msg) {
+    selfInfo = { error: msg }; if (done) done();
+  });
+}
+
+// ----- status for both sources -----
+// refresh=true: also ask Moonraker to check its remotes (refused while printing)
+function updStatus(refresh) {
+  if (updBusy) return;
+  var pending = 2;
+  var done = function() { if (--pending === 0) { updBusy = false; updRender(updLast); updSummary(); } };
+  updBusy = true; updRender(updLast);
+  updSetStatus('Checking for updates...', '');
+  selfStatus(true, done);
+  if (!BASE_URL) { done(); return; }
+  if (refresh && !printLocked) {
+    apiPost('/machine/update/refresh', null, function(d) { updLast = d.result; done(); },
+      function(status, msg) { updSetStatus('Moonraker check failed: ' + msg, 'err'); done(); }, 120000);
+  } else {
+    apiGet('/machine/update/status', function(d) { updLast = d.result; done(); }, done);
+  }
+}
+
+// Per-entry state: { count, badge, broken, ver }
 function updInfo(name, vi) {
   if (name.toLowerCase() === 'system') {
     var n = vi.package_count || 0;
@@ -2211,106 +2234,160 @@ function updInfo(name, vi) {
   return { count: count, badge: badge, broken: broken, ver: ver };
 }
 
+function selfState() {
+  if (!selfInfo) return { count: 0, badge: 'Checking', broken: false, ver: '', warn: '', na: true };
+  if (selfInfo.error) return { count: 0, badge: 'Unavailable', broken: false, ver: '', warn: selfInfo.error, na: true };
+  var c = selfInfo.behind || 0;
+  var ver = selfInfo.local + (c ? '  →  ' + selfInfo.remote : '') + '  (' + (selfInfo.branch || 'main') + ')';
+  return {
+    count: c, broken: !!selfInfo.dirty, ver: ver,
+    badge: selfInfo.dirty ? 'Modified' : (c ? c + ' new' : 'Up to date'),
+    warn: selfInfo.dirty ? 'Local files changed (e.g. scp). Repair resets to main.' : (selfInfo.fetch_error ? 'Could not reach GitHub: ' + selfInfo.fetch_error : '')
+  };
+}
+
+function rowHtml(i, label, s, disabled, warn) {
+  var badgeCls = s.broken || s.na ? ' warn' : (s.count ? '' : ' ok');
+  var btn = s.broken
+    ? '<button class="warning" onclick="updRecover(' + i + ')"' + (disabled ? ' disabled' : '') + '>' + ic('reprint') + ' Repair</button>'
+    : '<button class="success" onclick="updRunIdx(' + i + ')"' + (disabled || !s.count ? ' disabled' : '') + '>' + ic('load') + ' Update</button>';
+  return '<div class="upd-row"><div class="upd-info" onclick="updToggle(' + i + ')">' +
+    '<div class="upd-name">' + escHtml(label) + '<span class="upd-badge' + badgeCls + '">' + escHtml(s.badge) + '</span></div>' +
+    (s.ver ? '<div class="upd-ver">' + escHtml(s.ver) + '</div>' : '') +
+    (warn ? '<div class="upd-msg">' + escHtml(warn) + '</div>' : '') +
+    '</div>' + btn + '</div>';
+}
+
 function updRender(r) {
   updLast = r;
   var info = (r && r.version_info) || {};
-  // Order: simple3D, Klipper, Moonraker, others A-Z, System last
+  var selfOk = selfInfo && !selfInfo.error;
   var names = [];
-  for (var k in info) if (info.hasOwnProperty(k)) names.push(k);
+  for (var k in info) {
+    if (!info.hasOwnProperty(k)) continue;
+    if (selfOk && k.toLowerCase() === UPD_SELF) continue;   // server.py row wins
+    names.push(k);
+  }
+  // Order: Klipper, Moonraker, others A-Z, System last
   var rank = function(n) {
     n = n.toLowerCase();
     return n === UPD_SELF ? 0 : n === 'klipper' ? 1 : n === 'moonraker' ? 2 : n === 'system' ? 9 : 5;
   };
   names.sort(function(a, b) { return rank(a) - rank(b) || (a.toLowerCase() < b.toLowerCase() ? -1 : 1); });
-  updItems = names;
-  var off = updBusy || printLocked;
+
+  updItems = [SELF_KEY].concat(names);
   var html = '';
-  var hasSelf = false, anyUpdate = false;
+  var anyUpdate = false;
+
+  // simple3D row (server.py): only web files change, so allowed while printing
+  var ss = selfState();
+  html += rowHtml(0, updLabel(UPD_SELF), ss, updBusy || ss.na, ss.warn);
+  if (updOpen[SELF_KEY] && selfOk) html += commitsHtml(selfInfo.commits || []);
+
+  var off = updBusy || printLocked;
   for (var i = 0; i < names.length; i++) {
-    var name = names[i];
-    var vi = info[name] || {};
-    if (name.toLowerCase() === UPD_SELF) hasSelf = true;
-    var s = updInfo(name, vi);
+    var vi = info[names[i]] || {};
+    var s = updInfo(names[i], vi);
     if (s.count && !s.broken) anyUpdate = true;
-    var badgeCls = s.broken ? ' warn' : (s.count ? '' : ' ok');
-    var btn = s.broken
-      ? '<button class="warning" onclick="updRecover(' + i + ')"' + (off ? ' disabled' : '') + '>' + ic('reprint') + ' Repair</button>'
-      : '<button class="success" onclick="updRunIdx(' + i + ')"' + (off || !s.count ? ' disabled' : '') + '>' + ic('load') + ' Update</button>';
     var warn = '';
-    if (vi.is_dirty) warn = 'Local files changed (e.g. scp). Repair resets to the remote branch.';
+    if (vi.is_dirty) warn = 'Local files changed. Repair resets to the remote branch.';
     else if (s.broken && vi.warnings && vi.warnings.length) warn = vi.warnings.join(' ');
-    html += '<div class="upd-row"><div class="upd-info" onclick="updToggle(' + i + ')">' +
-      '<div class="upd-name">' + escHtml(updLabel(name)) + '<span class="upd-badge' + badgeCls + '">' + escHtml(s.badge) + '</span></div>' +
-      '<div class="upd-ver">' + escHtml(s.ver) + '</div>' +
-      '<div class="upd-msg" id="upd-msg-' + i + '">' + escHtml(warn) + '</div>' +
-      '</div>' + btn + '</div>';
-    if (updOpen[name]) html += updDetailHtml(name, vi);
+    html += rowHtml(i + 1, updLabel(names[i]), s, off, warn);
+    if (updOpen[names[i]]) html += updDetailHtml(names[i], vi);
   }
-  if (!hasSelf && names.length) {
-    html += '<p class="hint">simple3D is not listed: add [update_manager simple3d] to moonraker.conf (see README).</p>';
-  }
-  if (!names.length) html = '<p class="hint">' + (r ? 'Moonraker reports nothing to update.' : '') + '</p>';
+  if (!r && BASE_URL) html += '<p class="hint">Moonraker update status not loaded.</p>';
   $('upd-list').innerHTML = html;
-  $('upd-check').disabled = off;
+  $('upd-check').disabled = updBusy;
   $('upd-all').disabled = off || !anyUpdate;
   $('upd-lock').style.display = printLocked ? 'block' : 'none';
+  setText('upd-lock', 'Klipper / Moonraker / System updates are disabled while printing. simple3D can still update.');
 }
 
 function updSummary() {
   var info = (updLast && updLast.version_info) || {};
-  var n = 0;
-  for (var k in info) if (info.hasOwnProperty(k) && updInfo(k, info[k]).count) n++;
+  var n = selfInfo && !selfInfo.error && selfInfo.behind ? 1 : 0;
+  for (var k in info) {
+    if (!info.hasOwnProperty(k)) continue;
+    if (selfInfo && !selfInfo.error && k.toLowerCase() === UPD_SELF) continue;
+    if (updInfo(k, info[k]).count) n++;
+  }
   updSetStatus(n ? (n + ' item' + (n > 1 ? 's have' : ' has') + ' updates') : 'Everything is up to date', n ? '' : 'ok');
+}
+
+function commitsHtml(c) {
+  var rows = '';
+  for (var j = 0; j < c.length && j < 15; j++) {
+    rows += '<div><b>' + escHtml(String(c[j].sha || '').slice(0, 7)) + '</b>' + escHtml(c[j].subject || '') + '</div>';
+  }
+  return '<div class="upd-commits">' + (rows || '<div>No new commits.</div>') + '</div>';
 }
 
 // Commit list (git repos) or package list (system), toggled by tapping a row
 function updDetailHtml(name, vi) {
+  if (name.toLowerCase() !== 'system') return commitsHtml(vi.commits_behind || []);
   var rows = '';
-  if (name.toLowerCase() === 'system') {
-    var pk = vi.package_list || [];
-    for (var p = 0; p < pk.length && p < 30; p++) rows += '<div>' + escHtml(pk[p]) + '</div>';
-    if (pk.length > 30) rows += '<div>... and ' + (pk.length - 30) + ' more</div>';
-  } else {
-    var c = vi.commits_behind || [];
-    for (var j = 0; j < c.length && j < 15; j++) {
-      rows += '<div><b>' + escHtml(String(c[j].sha || '').slice(0, 7)) + '</b>' + escHtml(c[j].subject || '') + '</div>';
-    }
-  }
+  var pk = vi.package_list || [];
+  for (var p = 0; p < pk.length && p < 30; p++) rows += '<div>' + escHtml(pk[p]) + '</div>';
+  if (pk.length > 30) rows += '<div>... and ' + (pk.length - 30) + ' more</div>';
   return '<div class="upd-commits">' + (rows || '<div>No details.</div>') + '</div>';
 }
 
 function updToggle(i) {
-  var name = updItems[i];
-  if (!name) return;
-  updOpen[name] = !updOpen[name];
+  var key = updItems[i];
+  if (!key) return;
+  updOpen[key] = !updOpen[key];
   updRender(updLast);
 }
 
-function updRunIdx(i) { if (updItems[i]) updRun(updItems[i]); }
+function updRunIdx(i) {
+  var key = updItems[i];
+  if (key === SELF_KEY) selfUpdate(false);
+  else if (key) updRun(key);
+}
 
-// name '' = update everything
+function updRecover(i) {
+  var key = updItems[i];
+  if (key === SELF_KEY) selfUpdate(true);
+  else if (key) mrRecover(key);
+}
+
+// ----- simple3D via server.py -----
+function selfUpdate(force) {
+  var q = force
+    ? 'Repair simple3D?\nLocal changes in ~/simple3D are discarded and it is reset to GitHub main.'
+    : 'Update simple3D from GitHub main?\nOnly the web UI changes, so this is safe during a print. The page reloads when done.';
+  if (!confirm(q)) return;
+  updBusy = true; updRender(updLast);
+  updSetStatus((force ? 'Repairing' : 'Updating') + ' simple3D...', '');
+  selfRequest('POST', 'api/self/update' + (force ? '?force=1' : ''), function(d) {
+    updSetStatus('simple3D ' + d.from + ' → ' + d.to + '. Reloading...', 'ok');
+    // If server.py restarts itself, give systemd a moment before reloading
+    setTimeout(function() { location.reload(); }, d.restarting ? 5000 : 1500);
+  }, function(status, msg) {
+    updBusy = false;
+    updSetStatus('simple3D update failed: ' + msg, 'err');
+    selfStatus(false, function() { updRender(updLast); });
+  });
+}
+
+// ----- Moonraker update_manager entries -----
+// name '' = update everything Moonraker manages
 function updRun(name) {
   var lname = name.toLowerCase();
   var warn = {
-    '': 'Update everything? Klipper and Moonraker restart; the UI reconnects.',
+    '': 'Update everything Moonraker manages? Klipper and Moonraker restart; the UI reconnects.',
     klipper: 'Update Klipper? Klipper restarts.',
     moonraker: 'Update Moonraker? It restarts and this UI reconnects.',
     system: 'Update OS packages? This can take several minutes.'
   };
   if (printLocked) { showToast('Not while printing'); return; }
-  if (!confirm(warn[lname] || ('Update ' + updLabel(name) + '?' + (lname === UPD_SELF ? '\nThe page reloads when done.' : '')))) return;
+  if (!confirm(warn[lname] || ('Update ' + updLabel(name) + '?'))) return;
   updBusy = true; updRender(updLast);
   updSetStatus('Updating ' + (name ? updLabel(name) : 'everything') + '...', '');
-  var reloadAfter = lname === UPD_SELF || lname === '';
   var ok = function() {
     updBusy = false;
-    if (reloadAfter) {
-      updSetStatus('Done. Reloading...', 'ok');
-      setTimeout(function() { location.reload(); }, 2000);
-    } else {
-      updSetStatus(updLabel(name) + ' updated', 'ok');
-      updStatus(false);
-    }
+    updSetStatus((name ? updLabel(name) : 'Everything') + ' updated', 'ok');
+    updStatus(false);
   };
   var fail = function(status, msg) {
     updBusy = false;
@@ -2334,21 +2411,15 @@ function updRun(name) {
   }, timeout);
 }
 
-function updRecover(i) {
-  var name = updItems[i];
-  if (!name) return;
+function mrRecover(name) {
+  if (printLocked) { showToast('Not while printing'); return; }
   if (!confirm('Repair ' + updLabel(name) + '?\nLocal changes are discarded and it is reset to the remote branch.')) return;
   updBusy = true; updRender(updLast);
   updSetStatus('Repairing ' + updLabel(name) + '...', '');
   apiPost('/machine/update/recover?name=' + encodeURIComponent(name) + '&hard=true', null, function() {
     updBusy = false;
-    if (name.toLowerCase() === UPD_SELF) {
-      updSetStatus('Repaired. Reloading...', 'ok');
-      setTimeout(function() { location.reload(); }, 2000);
-    } else {
-      updSetStatus(updLabel(name) + ' repaired', 'ok');
-      updStatus(false);
-    }
+    updSetStatus(updLabel(name) + ' repaired', 'ok');
+    updStatus(false);
   }, function(status, msg) {
     updBusy = false;
     updSetStatus('Repair failed: ' + msg, 'err');
