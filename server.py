@@ -93,6 +93,10 @@ def git_update(force):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    # Python 3.9's mimetypes doesn't know the web app manifest
+    extensions_map = dict(SimpleHTTPRequestHandler.extensions_map)
+    extensions_map['.webmanifest'] = 'application/manifest+json'
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 

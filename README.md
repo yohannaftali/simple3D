@@ -99,6 +99,7 @@ The settings are saved in the browser, so each device only needs this once.
 | Calibrate Z offset (paper test) | **Tools › Z Offset**, then PROBE_CALIBRATE or Z_ENDSTOP_CALIBRATE |
 | Run a macro | **Tools › Macros** |
 | Run a macro with parameters | **Console › Macros**, then **Insert**, type the parameters, and **Send** |
+| Go full screen | **Settings › System › Full screen** (see *Full screen* below for app mode) |
 | Recover after an E-Stop | **Settings › System › Firmware Restart** |
 | Update simple3D, Klipper, Moonraker or OS packages | **Settings › Update**, then **Check** and **Update** on a row (or **Update all**) |
 
@@ -109,8 +110,16 @@ The settings are saved in the browser, so each device only needs this once.
 - **Printer name:** Home shows the name set in Fluidd (*Settings › General › Printer name*) or Mainsail; otherwise the board's hostname.
 - **Temperature/fan tiles:** the MCU, SoC, exhaust and hotend fan tiles read `temperature_sensor MCU`, `temperature_sensor SoC`, `fan_generic exhaust_fan` and `heater_fan hotend_fan`. Rename them in `WS_OBJECTS` inside `index.html` if your config uses other names.
 
-### Kiosk tip (iOS)
-In Safari, tap **Share › Add to Home Screen** to open the UI full-screen without the browser bars.
+### Full screen
+
+| Device | How |
+|---|---|
+| Any browser with full-screen support (Android, Chrome, Edge, Firefox, iPad on iPadOS 12+) | **Settings › System › Full screen**. Set **Start in full screen** to *On* and it enters full screen on your first tap after loading (browsers require a tap). |
+| iPad / iPhone (incl. iOS 10) | Safari › **Share › Add to Home Screen**, then open **simple3D** from the home screen. It always runs full screen with no browser bars. |
+| Android tablet | Chrome menu › **Install app** / **Add to Home screen**. The app manifest opens it full screen in landscape. |
+| Screen attached to the printer board / a Raspberry Pi | Start Chromium in kiosk mode: `chromium-browser --kiosk --noerrdialogs http://localhost:8080` (or the board IP). |
+
+> A home-screen app on iOS keeps its own storage, so enter the Moonraker IP once more the first time you open it.
 
 ## Updating from the UI
 
@@ -183,6 +192,8 @@ python3 server.py --port 8080      # --bind 127.0.0.1 to test locally
 simple3D/
 ├── index.html            # entire application (single file)
 ├── server.py             # web server + self-update API (git pull from main)
+├── manifest.webmanifest  # app manifest: install as full-screen app
+├── icon-180/192/512.png  # app icons (home screen)
 ├── simple3d.service      # systemd service definition (runs server.py)
 ├── install_service.sh    # installer script
 ├── docs/screenshots/     # README images

@@ -214,3 +214,9 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - The simple3D row in Settings > Update now uses server.py and is allowed while printing; Moonraker rows stay locked. A Moonraker `simple3d` entry is hidden when server.py answers.
 - `simple3d.service`: ExecStart is server.py, `Restart=always`, `RestartSec=2`. `install_service.sh` now restarts (not just starts) and is safe to re-run.
 - Tested end-to-end against a local bare repo: behind=1 shown in the UI, ff update, and a self-restart on a server.py change (exit 75).
+
+### Phase 8.6: Full screen
+
+- Settings > System > Display: a Full screen / Exit full screen button (Fullscreen API including the webkit/moz/ms prefixes; `p['catch']` so old engines parse it), and "Start in full screen" (`fs_auto`), which enters full screen on the first tap after load, because browsers block it without a gesture.
+- The hint adapts: already running as an app, iOS without the Fullscreen API (use Add to Home Screen), or install suggestion.
+- App mode: `manifest.webmanifest` (display fullscreen, landscape) + icons 180/192/512 + Apple/Android meta tags; the title is now "simple3D". server.py maps `.webmanifest` to `application/manifest+json`.

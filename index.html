@@ -3,8 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- App mode: "Add to Home Screen" (iOS) / "Install app" (Android) opens full screen -->
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Klipper Control</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="simple3D">
+<meta name="theme-color" content="#0f0f23">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>simple3D</title>
 <style>
   /* Page-based touch UI for a 7" landscape screen (800x480 .. 1024x600).
      Sidebar = pages; tabs at the top of a page = sub-pages (Bambu style). */
@@ -785,6 +793,16 @@
         <button onclick="location.reload()" style="width:100%;"><i data-ic="refresh"></i> Reload this UI</button>
         <p class="hint">After an E-Stop, Klipper is shut down. Use Firmware Restart to recover.</p>
       </div>
+      <div class="panel">
+        <div class="p-title"><i data-ic="maximize"></i>Display</div>
+        <button onclick="fsToggle()" class="success" id="fs-btn" style="width:100%;margin-bottom:10px;"><i data-ic="maximize"></i> Full screen</button>
+        <div class="opt-label">Start in full screen (on first tap)</div>
+        <div class="seg" id="seg-fs-auto">
+          <button data-v="0" onclick="setFsAuto(0)">Off</button>
+          <button data-v="1" onclick="setFsAuto(1)">On</button>
+        </div>
+        <p class="hint" id="fs-hint"></p>
+      </div>
     </div>
     <div class="sub" id="sub-settings-update">
       <div class="panel">
@@ -923,6 +941,8 @@ var ICONS = {
   'minus': '<line x1="5" y1="12" x2="19" y2="12"/>',
   'send': '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
   'check': '<polyline points="20 6 9 17 4 12"/>',
+  'maximize': '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+  'minimize': '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
   'lan': '<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-4h14v4"/><line x1="12" y1="8" x2="12" y2="12"/>'
 };
 
@@ -2433,6 +2453,94 @@ function updProgress(p) {
   if (p.message) updSetStatus((p.application ? updLabel(String(p.application)) + ': ' : '') + p.message, '');
 }
 
+// ===== FULL SCREEN =====
+// Browsers only allow full screen right after a tap, so "start in full
+// screen" waits for the first touch. Installed home-screen apps
+// (manifest display:fullscreen / apple-mobile-web-app-capable) are
+// already full screen and need neither.
+function fsElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement ||
+    document.webkitCurrentFullScreenElement || document.mozFullScreenElement || document.msFullscreenElement || null;
+}
+
+function fsRequestFn() {
+  var d = document.documentElement;
+  return d.requestFullscreen || d.webkitRequestFullscreen || d.webkitRequestFullScreen ||
+    d.mozRequestFullScreen || d.msRequestFullscreen || null;
+}
+
+function isStandalone() {
+  if (window.navigator.standalone) return true;   // iOS home-screen app
+  try {
+    return window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches;
+  } catch(e) { return false; }
+}
+
+function fsEnter() {
+  var fn = fsRequestFn();
+  if (!fn) return;
+  try {
+    var p = fn.call(document.documentElement);
+    if (p && p['catch']) p['catch'](function() {});   // promise in new browsers
+  } catch(e) {}
+}
+
+function fsExit() {
+  var fn = document.exitFullscreen || document.webkitExitFullscreen || document.webkitCancelFullScreen ||
+    document.mozCancelFullScreen || document.msExitFullscreen;
+  if (!fn) return;
+  try {
+    var p = fn.call(document);
+    if (p && p['catch']) p['catch'](function() {});
+  } catch(e) {}
+}
+
+function fsToggle() {
+  if (fsElement()) fsExit(); else fsEnter();
+}
+
+function fsUpdateUI() {
+  var btn = $('fs-btn');
+  var hint = $('fs-hint');
+  var standalone = isStandalone();
+  var supported = !!fsRequestFn();
+  segSelect('seg-fs-auto', recall('fs_auto') === '1' ? 1 : 0);
+  if (standalone) {
+    btn.disabled = true;
+    btn.innerHTML = ic('check') + ' Running as app (full screen)';
+    hint.textContent = 'Opened from the home screen, so it is already full screen.';
+    return;
+  }
+  btn.disabled = !supported;
+  btn.innerHTML = fsElement() ? ic('minimize') + ' Exit full screen' : ic('maximize') + ' Full screen';
+  var ios = /iP(ad|hone|od)/.test(navigator.userAgent);
+  hint.textContent = !supported
+    ? (ios ? 'This browser has no full-screen button. Use Share > Add to Home Screen, then open simple3D from the home screen.'
+           : 'This browser does not support full screen. Install it as an app from the browser menu instead.')
+    : 'For permanent full screen, install it from the browser menu (Add to Home Screen / Install app).';
+}
+
+function setFsAuto(v) {
+  store('fs_auto', v);
+  fsUpdateUI();
+  if (v) showToast('Full screen starts on your first tap after the page loads');
+}
+
+function initFullscreen() {
+  var evs = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+  for (var i = 0; i < evs.length; i++) document.addEventListener(evs[i], fsUpdateUI);
+  fsUpdateUI();
+  if (recall('fs_auto') !== '1' || isStandalone() || !fsRequestFn()) return;
+  // First tap anywhere enters full screen (a tap is required by the browser)
+  var once = function() {
+    document.removeEventListener('touchend', once);
+    document.removeEventListener('click', once);
+    if (!fsElement()) fsEnter();
+  };
+  document.addEventListener('touchend', once);
+  document.addEventListener('click', once);
+}
+
 // ===== STATUS / TOAST =====
 
 function setStatus(msg, color) {
@@ -2457,6 +2565,7 @@ function showToast(msg) {
 
 loadSettings();
 renderIcons();
+initFullscreen();
 // Home mini console refresh (only while Home is visible)
 setInterval(function() { if (currentPage === 'home' && BASE_URL) fetchHomeLog(); }, 3000);
 initTabs();
