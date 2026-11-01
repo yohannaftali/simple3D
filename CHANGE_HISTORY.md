@@ -146,3 +146,41 @@ Detailed implementation notes per phase. AGENTS.md holds the current reference s
 
 - `mcu` and `temperature_host` report `temperature: null` on this printer; the values live in `temperature_sensor MCU` and `temperature_sensor SoC`
 - `WS_OBJECTS` and `updateTempsUI()` now use those names (hardcoded, like `heater_fan hotend_fan` / `fan_generic exhaust_fan`)
+
+---
+
+## Phase 7 — UI refresh (KlipperScreen / Bambu style)
+
+- **Sidebar navigation:** bottom `#nav-bar` replaced by a fixed left `#sidebar` (84px, 60px under 520px wide). Each item has an SVG icon and a label. Live nozzle/bed temps and a connection dot sit at the bottom, plus an **E-Stop** (`POST /printer/emergency_stop`, with confirm). `.page` got a `margin-left`, and `fitMainPage()` no longer subtracts 44px.
+- **Icons:** inline SVG `ICONS` map + `ic()` / `renderIcons()`. They're used in card titles, temp/fan rows, buttons, and nav. Icon-over-text buttons use block `<i>`/`<svg>` (no flexbox inside `<button>`, unreliable before Safari 11).
+- **Print status:** Bambu-style layout with a part thumbnail taken from the file metadata `thumbnails` (largest one). Shows big %, remaining time, layer `current/total` from `print_stats.info`, and filament. The metadata fetch is de-duplicated with `metaPendingFile`, and a failed or empty result no longer refetches on every WS push.
+- **Movement:** joystick-style XY ring (SVG background, 4 direction buttons, home XY in the center) plus a Z column (Z+ / home Z / Z−). The step `<select>` became a segmented control (0.1/1/10/25/50, remembered). Live X/Y/Z readout from `toolhead.position` turns green when the axis is homed. Actions: Home All, QGL (if `quad_gantry_level`), Z Tilt (if `z_tilt`), Motors Off (M84).
+- **Filament page (Bambu style):** Nozzle card has a big temp readout, −/+ target, Heat/Off, and material chips (PLA/PETG/ABS/ASA/TPU/PA). Extruder card has Retract ▲ / Extrude ▼ around a nozzle graphic, plus distance (5–100mm) and speed (1–10mm/s) selectors. Load/Unload use `LOAD_FILAMENT` / `UNLOAD_FILAMENT` macros if defined, otherwise a G-code fallback. A cold-nozzle confirm appears below 170°C.
+- **Jobs:** thumbnails plus estimated time and filament per file. Metadata is fetched one request at a time (first 60 files) and cached by `path|modified`.
+- **Calibrate:** BED_MESH_CALIBRATE and Z_TILT_ADJUST are added to Calibration Tools when the printer has them.
+- **Connection card:** FW Restart button (`POST /printer/firmware_restart`).
+- `apiGet()` gained an optional `errCb` (non-200 / timeout / bad JSON).
+- Fix: the Jobs "Print" button now escapes for JS before HTML. Before, filenames with `'` broke the onclick.
+
+---
+
+## Phase 8: Page-based layout for 7" screens
+
+Requested: "style with page rather than many sections, it is for only 7 inch screen", and "one page can be split into many pages like in Bambu Lab UI".
+
+- Replaced the scrolling Main page of collapsible / draggable / resizable cards with one-screen pages. Card collapse, drag, resize, `CARD_IDS`, `fitMainPage()`, mini console, and the Custom GCode card are removed; the Console page covers GCode.
+- **Sidebar:** Home, Control, Filament, Files, Tools, Console, Settings (with connection dot), plus E-Stop.
+- **Tabs (sub-pages):** generic `TABS` / `showTab()` / `initTabs()`. Control = Move | Temperature, Tools = Macros | Calibrate | Z Offset, Settings = Connection | System. The last tab per page is remembered.
+- **Home:** large thumbnail, big %, progress, time/layer/filament, Pause/Resume/Cancel (Cancel now confirms), Reprint, and a Files shortcut when idle. 2x3 status tiles; tapping Nozzle/Bed/Fan/Speed opens the keypad for that value.
+- **Temperature keypad:** pick Nozzle / Bed / Part Fan / Speed, then use presets or a 0-9 keypad. No on-screen keyboard is needed.
+- **Z Offset tab:** live baby-stepping (`SET_GCODE_OFFSET Z_ADJUST=.. MOVE=1`) with a 0.005-0.05 step, Reset, and Save (`Z_OFFSET_APPLY_PROBE`/`_ENDSTOP` + `SAVE_CONFIG`, blocked while printing). The paper-test calibration (TESTZ) moved here, with a Done button after ACCEPT.
+- **Print lock** now disables the controls in `.lockable` panels (Move, Extruder, Macros, Calibrate, paper test) and shows a `.lock-msg`, instead of collapsing cards.
+- Filament target is a -/+ stepper (`filSetTemp`) instead of a number input.
+- `jsAttr()` helper for JS-in-attribute escaping (macro, tool, and file buttons).
+- Settings > System adds Restart Klipper (`POST /printer/restart`) and Reload UI. On first run with no IP saved, the app opens Settings.
+
+### Phase 8.1: Control > Move additions
+
+- The Quad Gantry Level button is always visible, under Home All / Motors Off. `runQgl()` offers `G28` -> `QUAD_GANTRY_LEVEL` -> `G28 Z` when not homed, and warns if the config has no `[quad_gantry_level]`.
+- Z Offset button (shows the current offset) jumps to Tools > Z Offset. It is `.nolock`, so it works while printing.
+- The position readout is now an Actual / Target table like Mainsail/Fluidd. Actual = `motion_report.live_position`, Target = `gcode_move.gcode_position`, and the axis letter turns green when homed. WS subscription adds `motion_report` and `gcode_move.gcode_position`.
