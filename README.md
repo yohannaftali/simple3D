@@ -47,7 +47,7 @@ There are no build tools, no npm, and no framework. The whole app is one `index.
   - Calibrate: QGL, Z tilt, bed mesh, probe accuracy and calibrate, PID macros, endstops, stepper buzz.
   - Z Offset: live baby-stepping during a print, plus the paper-test calibration.
 - **Console:** G-code log with command history and a **Macros** picker page (filter, descriptions, Insert to add parameters, or Run).
-- **Settings:** Moonraker connection, Firmware Restart, Restart Klipper, and a **self-update** button (git pull from `main` through Moonraker).
+- **Settings:** Moonraker connection, Firmware Restart, Restart Klipper, and an **Update** tab. It lists simple3D, **Klipper**, **Moonraker**, **System (OS packages)** and any other software Moonraker tracks, each with its own Update button, plus Update all. Updates are disabled while printing.
 - **Print lock:** while a print runs, the Move, Extruder, Macros and Calibrate controls are disabled. Pause, Cancel and Z Offset stay usable.
 - **Live data** comes over the Moonraker WebSocket.
 
@@ -100,7 +100,7 @@ The settings are saved in the browser, so each device only needs this once.
 | Run a macro | **Tools › Macros** |
 | Run a macro with parameters | **Console › Macros**, then **Insert**, type the parameters, and **Send** |
 | Recover after an E-Stop | **Settings › System › Firmware Restart** |
-| Update simple3D | **Settings › System**, then **Check** and **Update from main** |
+| Update simple3D, Klipper, Moonraker or OS packages | **Settings › Update**, then **Check** and **Update** on a row (or **Update all**) |
 
 ### Optional printer setup
 - **Thumbnails:** turn on G-code thumbnails in your slicer (e.g. `300x300`) for the Home and Files pictures.
@@ -111,11 +111,15 @@ The settings are saved in the browser, so each device only needs this once.
 ### Kiosk tip (iOS)
 In Safari, tap **Share › Add to Home Screen** to open the UI full-screen without the browser bars.
 
-## Updating from the UI (git pull from `main`)
+## Updating from the UI
 
-**Settings › System › simple3D Update** shows the installed and latest versions and the new commits on `main`. **Update from main** pulls them in, then the page reloads.
+**Settings › Update** lists everything Moonraker's update manager tracks: simple3D, Klipper, Moonraker, System (OS packages), and any other entries such as Fluidd or KlipperScreen.
+- Each row shows the installed version and a badge (*Up to date*, *N new*, *N packages*, *Modified*). Tap a row to see the new commits or packages.
+- **Update** updates that item. **Update all** does everything. **Repair** appears when a repo has local changes.
+- After updating simple3D, the page reloads by itself.
+- Updates are disabled while a print is running.
 
-The browser can't run `git` itself. Moonraker's update manager does the pull, so one-time setup on the printer is needed:
+Klipper, Moonraker and System work out of the box. For **simple3D itself** (a git pull from `main`), Moonraker needs a one-time setup on the printer, because the browser can't run `git`:
 
 1. `~/simple3D` must be a git clone, as created by the Installation steps above. If you deployed with `scp` before, convert it:
    ```bash

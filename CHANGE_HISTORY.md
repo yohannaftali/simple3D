@@ -190,3 +190,11 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 - **Settings › System › simple3D Update:** shows installed vs latest version and the commits behind. Check (`/machine/update/refresh`), Update from main (`/machine/update/upgrade`, with `/client` as a fallback), and Reset to main (`/machine/update/recover?hard=true`), which appears only when the repo is dirty or invalid. Progress comes from `notify_update_response`; the page reloads after updating. This needs `[update_manager simple3d]` in moonraker.conf (see README).
 - `apiPost()` gained `errCb(status, message)` (Moonraker error message) and `timeoutMs`.
 - **Console › Macros:** a full-page picker listing all visible macros, with descriptions from `/printer/gcode/help` and a filter box. Insert puts `NAME ` in the input for parameters; Run sends it and goes back to the log.
+
+### Phase 8.3: Update tab (Klipper / Moonraker / System / simple3D)
+
+- New tab **Settings › Update** replaces the simple3D-only panel. It lists every Moonraker update_manager entry with a badge, an Update button and expandable commits/packages, plus Check (`/machine/update/refresh`) and Update all (`/machine/update/upgrade` with no name). Repair (`recover?hard=true`) appears for dirty or invalid repos.
+- Legacy endpoint fallback on 404. A dropped connection during a Moonraker/system update is treated as a restart, and the status is re-checked after 10s.
+- All update actions are disabled while printing; the list re-renders when the print lock changes.
+- Tested against the CB1's real `/machine/update/status` (Moonraker v0.11 reports the key `System` capitalised).
+- Printer: `~/simple3D` converted to a git clone of `main` (backup `~/simple3D.bak-20261101`).

@@ -328,14 +328,25 @@
   .pick-row button { -webkit-flex: none; flex: none; min-width: 76px; }
 
   /* ===== SETTINGS ===== */
-  .upd-tbl { width: 100%; border-collapse: collapse; background: #0a0a1a; border-radius: 8px; margin-bottom: 8px; }
-  .upd-tbl td { padding: 6px 8px; font-family: monospace; font-size: 13px; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
-  .upd-tbl .pl { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #888; text-transform: uppercase; width: 100px; }
+  .upd-row {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-align: center; -webkit-align-items: center; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid #2a2a4a;
+  }
+  .upd-row > * + * { margin-left: 8px; }
+  .upd-info { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 0; cursor: pointer; }
+  .upd-name { font-size: 15px; color: #fff; }
+  .upd-badge { display: inline-block; font-size: 11px; color: #fff; background: #2a5298; border-radius: 9px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; }
+  .upd-badge.ok { background: #1a4731; }
+  .upd-badge.warn { background: #8a5a10; }
+  .upd-ver { font-family: monospace; font-size: 12px; color: #999; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .upd-msg { font-size: 11px; color: #f0c040; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .upd-row button { -webkit-flex: none; flex: none; min-width: 96px; }
   .upd-status { font-size: 13px; color: #ccc; padding: 6px 8px; border-radius: 6px; background: #0f3460; }
   .upd-status.ok { background: #1a4731; }
   .upd-status.warn { background: #4a3a1a; color: #f0c040; }
   .upd-status.err { background: #4a1a1a; }
-  .upd-commits { margin-top: 6px; font-size: 12px; }
+  .upd-commits { font-size: 12px; padding: 0 0 6px 10px; border-bottom: 1px solid #2a2a4a; }
   .upd-commits div { padding: 4px 2px; border-bottom: 1px solid #2a2a4a; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .upd-commits b { color: #a0c4ff; font-family: monospace; font-weight: normal; margin-right: 6px; }
   #status-bar { font-size: 13px; padding: 8px 10px; border-radius: 6px; margin-top: 10px; background: #0f3460; }
@@ -726,6 +737,7 @@
     <div class="tabs">
       <button class="tab" id="tab-settings-connection" onclick="showTab('settings','connection')"><i data-ic="wifi"></i>Connection</button>
       <button class="tab" id="tab-settings-system" onclick="showTab('settings','system')"><i data-ic="settings"></i>System</button>
+      <button class="tab" id="tab-settings-update" onclick="showTab('settings','update')"><i data-ic="load"></i>Update</button>
     </div>
     <div class="sub" id="sub-settings-connection">
       <div class="panel">
@@ -750,19 +762,15 @@
         <button onclick="location.reload()" style="width:100%;"><i data-ic="refresh"></i> Reload this UI</button>
         <p class="hint">After an E-Stop, Klipper is shut down. Use Firmware Restart to recover.</p>
       </div>
+    </div>
+    <div class="sub" id="sub-settings-update">
       <div class="panel">
-        <div class="p-title"><i data-ic="load"></i>simple3D Update</div>
-        <table class="upd-tbl">
-          <tr><td class="pl">Installed</td><td id="upd-local">--</td></tr>
-          <tr><td class="pl">Latest (main)</td><td id="upd-remote">--</td></tr>
-        </table>
+        <div class="p-title row"><span><i data-ic="load"></i>Software Updates</span><span class="sp"></span>
+          <button class="btn-sm" id="upd-check" onclick="updStatus(true)"><i data-ic="refresh"></i> Check</button>
+          <button class="btn-sm success" id="upd-all" onclick="updRun('')" style="margin-left:6px;"><i data-ic="load"></i> Update all</button></div>
+        <div id="upd-lock" class="lock-msg">Updates are disabled while printing</div>
         <div id="upd-status" class="upd-status">Open this tab to check for updates.</div>
-        <div id="upd-commits" class="grow upd-commits"></div>
-        <div class="btn-row" style="margin-top:8px;">
-          <button onclick="updCheck()" id="upd-check"><i data-ic="refresh"></i> Check</button>
-          <button onclick="updRun()" class="success" id="upd-run" disabled><i data-ic="load"></i> Update from main</button>
-        </div>
-        <button onclick="updRecover()" class="warning" id="upd-recover" style="display:none;width:100%;margin-top:8px;"><i data-ic="reprint"></i> Reset to main (discard local changes)</button>
+        <div id="upd-list" class="grow"></div>
       </div>
     </div>
   </div>
@@ -826,7 +834,7 @@ var PAGES = ['home', 'control', 'filament', 'files', 'tools', 'console', 'settin
 var TABS = {
   control: ['move', 'temp'],
   tools: ['macros', 'calibrate', 'zoffset'],
-  settings: ['connection', 'system']
+  settings: ['connection', 'system', 'update']
 };
 
 var WS_OBJECTS = {
@@ -960,7 +968,7 @@ function showTab(page, tab) {
   store('tab_' + page, tab);
   // Keypad starts from the printer's current value each time it is opened
   if (page === 'control' && tab === 'temp') selectTemp(kpTarget);
-  if (page === 'settings' && tab === 'system') updStatus(false);
+  if (page === 'settings' && tab === 'update') updStatus(false);
 }
 
 function initTabs() {
@@ -1427,6 +1435,7 @@ function updatePrintLock(state) {
   if (lock === printLocked) return;
   printLocked = lock;
   applyPrintLockControls();
+  if (updLast) updRender(updLast);
 }
 
 function applyPrintLockControls() {
@@ -2036,16 +2045,22 @@ function pickMacro(idx, run) {
   });
 })();
 
-// ===== SELF-UPDATE (Moonraker update_manager, git pull from main) =====
-// Needs this in moonraker.conf (Moonraker does the git pull, not the browser):
+// ===== SOFTWARE UPDATES (Moonraker update_manager) =====
+// Lists everything Moonraker's update manager tracks: simple3D, Klipper,
+// Moonraker, System (OS packages) and any other [update_manager x] entry.
+// simple3D needs this in moonraker.conf (Moonraker runs the git pull):
 //   [update_manager simple3d]
 //   type: git_repo
 //   path: ~/simple3D
 //   origin: https://github.com/yohannaftali/simple3D.git
 //   primary_branch: main
 //   is_system_service: False
-var UPD_NAME = 'simple3d';
+var UPD_SELF = 'simple3d';
+var UPD_LABELS = { simple3d: 'simple3D (this UI)', klipper: 'Klipper', moonraker: 'Moonraker', system: 'System (OS packages)' };
 var updBusy = false;
+var updLast = null;      // last status result, re-rendered when the print lock changes
+var updItems = [];       // rendered names, indexed by row
+var updOpen = {};        // name -> commit list expanded
 
 function updSetStatus(msg, cls) {
   var el = $('upd-status');
@@ -2053,114 +2068,193 @@ function updSetStatus(msg, cls) {
   el.className = 'upd-status' + (cls ? ' ' + cls : '');
 }
 
-function updButtons(canRun) {
-  $('upd-check').disabled = updBusy;
-  $('upd-run').disabled = updBusy || !canRun;
-  $('upd-recover').disabled = updBusy;
-}
+function updLabel(name) { return UPD_LABELS[name.toLowerCase()] || name; }
 
-// refresh=true asks Moonraker to fetch from GitHub first (Check button)
+// refresh=true asks Moonraker to fetch from the remotes first (Check button)
 function updStatus(refresh) {
   if (updBusy) return;
   if (!BASE_URL) { updSetStatus('Not connected', 'err'); return; }
   if (refresh) {
-    updBusy = true; updButtons(false);
-    updSetStatus('Checking GitHub...', '');
-    apiPost('/machine/update/refresh?name=' + UPD_NAME, null, function(d) {
-      updBusy = false; updRender(d.result);
+    updBusy = true; updRender(updLast);
+    updSetStatus('Checking for updates...', '');
+    apiPost('/machine/update/refresh', null, function(d) {
+      updBusy = false; updRender(d.result); updSummary();
     }, function(status, msg) {
-      updBusy = false; updButtons(false);
-      updSetStatus(status === 404 || /not found|no updater/i.test(msg) ? updNotSetUpMsg() : ('Check failed: ' + msg), status === 404 ? 'warn' : 'err');
-    }, 60000);
+      updBusy = false; updRender(updLast);
+      updSetStatus('Check failed: ' + msg, 'err');
+    }, 120000);
     return;
   }
-  apiGet('/machine/update/status', function(d) { updRender(d.result); },
+  apiGet('/machine/update/status', function(d) { updRender(d.result); updSummary(); },
     function() { updSetStatus('Could not read update status from Moonraker', 'err'); });
 }
 
-function updNotSetUpMsg() {
-  return 'Not set up: add [update_manager simple3d] to moonraker.conf and make ~/simple3D a git clone (see README).';
+// Per-entry state: { count, label (badge), broken, ver }
+function updInfo(name, vi) {
+  if (name.toLowerCase() === 'system') {
+    var n = vi.package_count || 0;
+    return { count: n, badge: n ? n + ' package' + (n > 1 ? 's' : '') : 'Up to date', broken: false, ver: 'apt packages' };
+  }
+  var behind = vi.commits_behind || [];
+  var count = typeof vi.commits_behind_count === 'number' ? vi.commits_behind_count : behind.length;
+  // web-type clients (Fluidd/Mainsail) only report versions
+  if (!count && vi.remote_version && vi.version && vi.remote_version !== '?' && vi.version !== vi.remote_version) count = 1;
+  var broken = !!(vi.is_dirty || vi.is_valid === false || vi.corrupt || vi.detached);
+  var local = vi.full_version_string || vi.version || '?';
+  var ver = local + (count && vi.remote_version ? '  →  ' + vi.remote_version : '');
+  var badge = broken ? (vi.is_dirty ? 'Modified' : 'Invalid') : (count ? (behind.length || vi.commits_behind_count ? count + ' new' : 'Update') : 'Up to date');
+  return { count: count, badge: badge, broken: broken, ver: ver };
 }
 
 function updRender(r) {
+  updLast = r;
   var info = (r && r.version_info) || {};
-  var vi = null;
-  for (var k in info) {
-    if (info.hasOwnProperty(k) && k.toLowerCase() === UPD_NAME) vi = info[k];
-  }
-  $('upd-commits').innerHTML = '';
-  if (!vi) {
-    setText('upd-local', '--'); setText('upd-remote', '--');
-    $('upd-recover').style.display = 'none';
-    updSetStatus(updNotSetUpMsg(), 'warn');
-    updButtons(false);
-    return;
-  }
-  setText('upd-local', vi.full_version_string || vi.version || '?');
-  setText('upd-remote', vi.remote_version || '?');
-  var behind = vi.commits_behind || [];
-  var count = typeof vi.commits_behind_count === 'number' ? vi.commits_behind_count : behind.length;
+  // Order: simple3D, Klipper, Moonraker, others A-Z, System last
+  var names = [];
+  for (var k in info) if (info.hasOwnProperty(k)) names.push(k);
+  var rank = function(n) {
+    n = n.toLowerCase();
+    return n === UPD_SELF ? 0 : n === 'klipper' ? 1 : n === 'moonraker' ? 2 : n === 'system' ? 9 : 5;
+  };
+  names.sort(function(a, b) { return rank(a) - rank(b) || (a.toLowerCase() < b.toLowerCase() ? -1 : 1); });
+  updItems = names;
+  var off = updBusy || printLocked;
   var html = '';
-  for (var i = 0; i < behind.length && i < 15; i++) {
-    var c = behind[i];
-    html += '<div><b>' + escHtml(String(c.sha || '').slice(0, 7)) + '</b>' + escHtml(c.subject || '') + '</div>';
+  var hasSelf = false, anyUpdate = false;
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    var vi = info[name] || {};
+    if (name.toLowerCase() === UPD_SELF) hasSelf = true;
+    var s = updInfo(name, vi);
+    if (s.count && !s.broken) anyUpdate = true;
+    var badgeCls = s.broken ? ' warn' : (s.count ? '' : ' ok');
+    var btn = s.broken
+      ? '<button class="warning" onclick="updRecover(' + i + ')"' + (off ? ' disabled' : '') + '>' + ic('reprint') + ' Repair</button>'
+      : '<button class="success" onclick="updRunIdx(' + i + ')"' + (off || !s.count ? ' disabled' : '') + '>' + ic('load') + ' Update</button>';
+    var warn = '';
+    if (vi.is_dirty) warn = 'Local files changed (e.g. scp). Repair resets to the remote branch.';
+    else if (s.broken && vi.warnings && vi.warnings.length) warn = vi.warnings.join(' ');
+    html += '<div class="upd-row"><div class="upd-info" onclick="updToggle(' + i + ')">' +
+      '<div class="upd-name">' + escHtml(updLabel(name)) + '<span class="upd-badge' + badgeCls + '">' + escHtml(s.badge) + '</span></div>' +
+      '<div class="upd-ver">' + escHtml(s.ver) + '</div>' +
+      '<div class="upd-msg" id="upd-msg-' + i + '">' + escHtml(warn) + '</div>' +
+      '</div>' + btn + '</div>';
+    if (updOpen[name]) html += updDetailHtml(name, vi);
   }
-  $('upd-commits').innerHTML = html;
-  var broken = vi.is_dirty || vi.is_valid === false || vi.corrupt || vi.detached;
-  $('upd-recover').style.display = broken ? '' : 'none';
-  if (vi.is_dirty) {
-    updSetStatus('Files in ~/simple3D were changed by hand (e.g. scp). Reset to main before updating.', 'warn');
-  } else if (vi.is_valid === false || vi.corrupt) {
-    var w = (vi.warnings && vi.warnings.length) ? vi.warnings.join(' ') : 'Repo is not valid.';
-    updSetStatus(w, 'warn');
-  } else if (count > 0) {
-    updSetStatus(count + ' update' + (count > 1 ? 's' : '') + ' available on main', '');
-  } else {
-    updSetStatus('Up to date', 'ok');
+  if (!hasSelf && names.length) {
+    html += '<p class="hint">simple3D is not listed: add [update_manager simple3d] to moonraker.conf (see README).</p>';
   }
-  updButtons(count > 0 && !broken);
+  if (!names.length) html = '<p class="hint">' + (r ? 'Moonraker reports nothing to update.' : '') + '</p>';
+  $('upd-list').innerHTML = html;
+  $('upd-check').disabled = off;
+  $('upd-all').disabled = off || !anyUpdate;
+  $('upd-lock').style.display = printLocked ? 'block' : 'none';
 }
 
-function updRun() {
-  if (!confirm('Update simple3D from GitHub main?\nThe page reloads when done.')) return;
-  updBusy = true; updButtons(false);
-  updSetStatus('Updating...', '');
+function updSummary() {
+  var info = (updLast && updLast.version_info) || {};
+  var n = 0;
+  for (var k in info) if (info.hasOwnProperty(k) && updInfo(k, info[k]).count) n++;
+  updSetStatus(n ? (n + ' item' + (n > 1 ? 's have' : ' has') + ' updates') : 'Everything is up to date', n ? '' : 'ok');
+}
+
+// Commit list (git repos) or package list (system), toggled by tapping a row
+function updDetailHtml(name, vi) {
+  var rows = '';
+  if (name.toLowerCase() === 'system') {
+    var pk = vi.package_list || [];
+    for (var p = 0; p < pk.length && p < 30; p++) rows += '<div>' + escHtml(pk[p]) + '</div>';
+    if (pk.length > 30) rows += '<div>... and ' + (pk.length - 30) + ' more</div>';
+  } else {
+    var c = vi.commits_behind || [];
+    for (var j = 0; j < c.length && j < 15; j++) {
+      rows += '<div><b>' + escHtml(String(c[j].sha || '').slice(0, 7)) + '</b>' + escHtml(c[j].subject || '') + '</div>';
+    }
+  }
+  return '<div class="upd-commits">' + (rows || '<div>No details.</div>') + '</div>';
+}
+
+function updToggle(i) {
+  var name = updItems[i];
+  if (!name) return;
+  updOpen[name] = !updOpen[name];
+  updRender(updLast);
+}
+
+function updRunIdx(i) { if (updItems[i]) updRun(updItems[i]); }
+
+// name '' = update everything
+function updRun(name) {
+  var lname = name.toLowerCase();
+  var warn = {
+    '': 'Update everything? Klipper and Moonraker restart; the UI reconnects.',
+    klipper: 'Update Klipper? Klipper restarts.',
+    moonraker: 'Update Moonraker? It restarts and this UI reconnects.',
+    system: 'Update OS packages? This can take several minutes.'
+  };
+  if (printLocked) { showToast('Not while printing'); return; }
+  if (!confirm(warn[lname] || ('Update ' + updLabel(name) + '?' + (lname === UPD_SELF ? '\nThe page reloads when done.' : '')))) return;
+  updBusy = true; updRender(updLast);
+  updSetStatus('Updating ' + (name ? updLabel(name) : 'everything') + '...', '');
+  var reloadAfter = lname === UPD_SELF || lname === '';
   var ok = function() {
     updBusy = false;
-    updSetStatus('Updated. Reloading...', 'ok');
-    setTimeout(function() { location.reload(); }, 1500);
+    if (reloadAfter) {
+      updSetStatus('Done. Reloading...', 'ok');
+      setTimeout(function() { location.reload(); }, 2000);
+    } else {
+      updSetStatus(updLabel(name) + ' updated', 'ok');
+      updStatus(false);
+    }
   };
   var fail = function(status, msg) {
     updBusy = false;
+    // Moonraker restarting itself drops the request; check again shortly
+    if (!status && (lname === 'moonraker' || lname === '' || lname === 'system')) {
+      updSetStatus('Connection dropped (service restarting). Checking again...', 'warn');
+      setTimeout(function() { updStatus(false); }, 10000);
+      return;
+    }
     updSetStatus('Update failed: ' + msg, 'err');
-    updButtons(true);
+    updRender(updLast);
   };
-  // /upgrade is current Moonraker; /client is the older name for the same action
-  apiPost('/machine/update/upgrade?name=' + UPD_NAME, null, ok, function(status, msg) {
-    if (status === 404) apiPost('/machine/update/client?name=' + UPD_NAME, null, ok, fail, 180000);
+  // Older Moonraker endpoints, used if /upgrade returns 404
+  var legacy = lname === '' ? '/machine/update/full' :
+    (lname === 'klipper' || lname === 'moonraker' || lname === 'system') ? '/machine/update/' + lname :
+    '/machine/update/client?name=' + encodeURIComponent(name);
+  var timeout = (lname === 'system' || lname === '') ? 3600000 : 900000;
+  apiPost('/machine/update/upgrade' + (name ? '?name=' + encodeURIComponent(name) : ''), null, ok, function(status, msg) {
+    if (status === 404) apiPost(legacy, null, ok, fail, timeout);
     else fail(status, msg);
-  }, 180000);
+  }, timeout);
 }
 
-function updRecover() {
-  if (!confirm('Discard local changes in ~/simple3D and reset it to GitHub main?')) return;
-  updBusy = true; updButtons(false);
-  updSetStatus('Resetting to main...', '');
-  apiPost('/machine/update/recover?name=' + UPD_NAME + '&hard=true', null, function() {
+function updRecover(i) {
+  var name = updItems[i];
+  if (!name) return;
+  if (!confirm('Repair ' + updLabel(name) + '?\nLocal changes are discarded and it is reset to the remote branch.')) return;
+  updBusy = true; updRender(updLast);
+  updSetStatus('Repairing ' + updLabel(name) + '...', '');
+  apiPost('/machine/update/recover?name=' + encodeURIComponent(name) + '&hard=true', null, function() {
     updBusy = false;
-    updSetStatus('Reset done. Reloading...', 'ok');
-    setTimeout(function() { location.reload(); }, 1500);
+    if (name.toLowerCase() === UPD_SELF) {
+      updSetStatus('Repaired. Reloading...', 'ok');
+      setTimeout(function() { location.reload(); }, 2000);
+    } else {
+      updSetStatus(updLabel(name) + ' repaired', 'ok');
+      updStatus(false);
+    }
   }, function(status, msg) {
     updBusy = false;
-    updSetStatus('Reset failed: ' + msg, 'err');
-    updButtons(false);
-  }, 180000);
+    updSetStatus('Repair failed: ' + msg, 'err');
+    updRender(updLast);
+  }, 900000);
 }
 
 // Live progress lines pushed by Moonraker during refresh/upgrade/recover
 function updProgress(p) {
-  if (!p || !p.application || String(p.application).toLowerCase() !== UPD_NAME) return;
-  if (p.message) updSetStatus(p.message, '');
+  if (!p) return;
+  if (p.message) updSetStatus((p.application ? updLabel(String(p.application)) + ': ' : '') + p.message, '');
 }
 
 // ===== STATUS / TOAST =====
