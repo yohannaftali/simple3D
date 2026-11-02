@@ -164,7 +164,11 @@
   .ps-stats > span { display: inline-block; margin: 0 14px 4px 0; white-space: nowrap; }
   .ps-stats .ic { width: 15px; height: 15px; margin: -2px 4px 0 0; color: #a0c4ff; }
   .print-msg { font-size: 13px; color: #f0c040; margin-top: 6px; padding: 4px 8px; background: rgba(240,192,64,0.1); border-left: 3px solid #f0c040; border-radius: 2px; }
-  .ps-btns button { min-height: 54px; font-size: 15px; }
+  /* Pause / Resume / Cancel: column to the right of the thumbnail */
+  .ps-btns { -webkit-flex: none; flex: none; width: 112px; margin-left: 10px; }
+  .ps-btns button { display: block; width: 100%; min-height: 46px; font-size: 14px; padding: 4px 6px; white-space: nowrap; }
+  .ps-btns button { margin-bottom: 6px; }
+  @media (max-height: 440px) { .ps-btns button { min-height: 36px; } }
   .home-head { margin-bottom: 8px; font-size: 13px; color: #aab; white-space: nowrap; }
   .home-head .sp { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 12px; }
   .hh-name { font-size: 16px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; }
@@ -436,6 +440,13 @@
           <div class="ps-pct" id="print-percent">0%</div>
           <div class="ps-file" id="print-filename">No file</div>
         </div>
+        <div class="ps-btns">
+          <button onclick="printAction('pause')" class="warning" id="btn-pause"><i data-ic="pause"></i> Pause</button>
+          <button onclick="printAction('resume')" class="success" id="btn-resume"><i data-ic="play"></i> Resume</button>
+          <button onclick="printAction('cancel')" class="danger" id="btn-cancel"><i data-ic="stop"></i> Cancel</button>
+          <button onclick="reprintLast()" class="success" id="btn-reprint" style="display:none;"><i data-ic="reprint"></i> Reprint</button>
+          <button onclick="showPage('files')" id="btn-files" style="display:none;"><i data-ic="folder"></i> Files</button>
+        </div>
       </div>
       <div id="print-progress"><div id="print-progress-bar"></div></div>
       <div class="ps-stats">
@@ -446,13 +457,6 @@
       </div>
       <div id="print-msg" class="print-msg" style="display:none;"></div>
       <div id="home-log" class="grow home-log" onclick="showPage('console')" title="Open console"><div class="log-hint">Console output appears here. Tap to open the console.</div></div>
-      <div class="btn-row ps-btns">
-        <button onclick="printAction('pause')" class="warning" id="btn-pause"><i data-ic="pause"></i> Pause</button>
-        <button onclick="printAction('resume')" class="success" id="btn-resume"><i data-ic="play"></i> Resume</button>
-        <button onclick="printAction('cancel')" class="danger" id="btn-cancel"><i data-ic="stop"></i> Cancel</button>
-        <button onclick="reprintLast()" class="success" id="btn-reprint" style="display:none;"><i data-ic="reprint"></i> Reprint</button>
-        <button onclick="showPage('files')" id="btn-files" style="display:none;"><i data-ic="folder"></i> Files</button>
-      </div>
     </div>
     <div class="panel tiles">
       <div class="tile-row">

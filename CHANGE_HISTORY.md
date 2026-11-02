@@ -225,3 +225,7 @@ Requested: "style with page rather than many sections, it is for only 7 inch scr
 
 - Tools > Z Offset paper test shows the live nozzle Z (`manual_probe` subscribed: z_position, tested lower/upper) and the suggested new z_offset (current config z_offset, delta), using Klipper's formula `z_offset - Z + probe contact Z`. The contact Z comes from the "bed will contact at z=" console lines (`notify_gcode_response`), median/average per `samples_result`. Z_ENDSTOP_CALIBRATE shows the new position_endstop.
 - After ACCEPT the value Klipper printed is shown with a SAVE_CONFIG reminder. Starting a manual probe from the console opens the panel too.
+
+### Phase 8.8: Home print buttons beside the thumbnail
+
+- Pause / Resume / Cancel (and Reprint / Files) moved from the bottom row to a column (`.ps-btns`, 112px) to the right of the thumbnail and progress. The mini console below gets the freed height.
