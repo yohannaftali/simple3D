@@ -805,7 +805,7 @@
         <div class="p-title"><i data-ic="power"></i>Klipper</div>
         <button onclick="firmwareRestart()" class="warning" style="width:100%;margin-bottom:8px;"><i data-ic="power"></i> Firmware Restart</button>
         <button onclick="klipperRestart()" style="width:100%;margin-bottom:8px;"><i data-ic="reprint"></i> Restart Klipper (host)</button>
-        <button onclick="location.reload()" style="width:100%;"><i data-ic="refresh"></i> Reload this UI</button>
+        <button onclick="reloadUI()" style="width:100%;"><i data-ic="refresh"></i> Reload this UI</button>
         <p class="hint">After an E-Stop, Klipper is shut down. Use Firmware Restart to recover.</p>
       </div>
       <div class="panel">
@@ -854,6 +854,8 @@ var currentPage = 'home';
 // WebSocket
 var ws = null;
 var wsReconnectTimer = null;
+var wsLastMsg = 0;          // time of the last WS message (Moonraker sends proc stats every second)
+var WS_STALE_MS = 15000;    // no message for this long = dead socket (iOS freezes background apps)
 var printerStatus = {};
 
 // Print state
@@ -1127,8 +1129,10 @@ function connectWS() {
     scheduleReconnect();
     return;
   }
-  ws.onopen = function() { wsSubscribe(); };
+  wsLastMsg = new Date().getTime();
+  ws.onopen = function() { wsLastMsg = new Date().getTime(); wsSubscribe(); };
   ws.onmessage = function(e) {
+    wsLastMsg = new Date().getTime();
     var data;
     try { data = JSON.parse(e.data); } catch(ex) { return; }
     handleWSMessage(data);
@@ -1166,8 +1170,47 @@ function scheduleReconnect() {
 }
 
 function refreshAll() {
+  if (wsIsStale()) { wsRestart(); return; }
   if (!ws || ws.readyState !== 1) connectWS();
   else wsSubscribe();
+}
+
+// A socket can look open after iOS suspends the app but never deliver again
+function wsIsStale() {
+  return !!ws && (ws.readyState === 0 || ws.readyState === 1) &&
+    new Date().getTime() - wsLastMsg > WS_STALE_MS;
+}
+
+function wsRestart() {
+  setStatus('Reconnecting...', 'red');
+  setPrintStateUnknown();
+  disconnectWS();
+  connectWS();
+}
+
+// Coming back to the foreground: reconnect a dead socket, refresh lists
+function onAppResume() {
+  if (!WS_URL) return;
+  if (wsIsStale() || !ws || ws.readyState > 1) wsRestart();
+  else wsSubscribe();
+}
+
+function initResume() {
+  setInterval(function() { if (wsIsStale()) wsRestart(); }, 5000);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) onAppResume();
+  });
+  document.addEventListener('webkitvisibilitychange', function() {
+    if (!document.webkitHidden) onAppResume();
+  });
+  window.addEventListener('pageshow', function(e) { if (e.persisted) onAppResume(); });
+  window.addEventListener('focus', onAppResume);
+}
+
+// Reload with a unique URL so iOS (home-screen app) can't serve a cached page
+function reloadUI() {
+  var u = location.pathname + '?r=' + new Date().getTime() + location.hash;
+  location.replace(u);
 }
 
 function handleWSMessage(data) {
@@ -2513,7 +2556,7 @@ function selfUpdate(force) {
   selfRequest('POST', 'api/self/update' + (force ? '?force=1' : ''), function(d) {
     updSetStatus('simple3D ' + d.from + ' → ' + d.to + '. Reloading...', 'ok');
     // If server.py restarts itself, give systemd a moment before reloading
-    setTimeout(function() { location.reload(); }, d.restarting ? 5000 : 1500);
+    setTimeout(reloadUI, d.restarting ? 5000 : 1500);
   }, function(status, msg) {
     updBusy = false;
     updSetStatus('simple3D update failed: ' + msg, 'err');
@@ -2697,6 +2740,7 @@ function showToast(msg) {
 loadSettings();
 renderIcons();
 initFullscreen();
+initResume();
 // Home mini console refresh (only while Home is visible)
 setInterval(function() { if (currentPage === 'home' && BASE_URL) fetchHomeLog(); }, 3000);
 initTabs();
